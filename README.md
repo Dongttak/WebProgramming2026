@@ -29,9 +29,25 @@ WebProgramming2026/
 - Flask 세션 쿠키 기반 로그인 상태 유지
 - MongoDB 기반 매칭 글 CRUD
 - 카테고리: 팀플, 밥, 룸메, 외국인 교류
+- React Router 기반 페이지 URL
+- 글 작성/수정 시 연락 수단 저장
 - 데이트 카테고리는 확장 기능 후보로만 표시
 - 키워드 기반 mock AI 추천 API
 - 서버 실행 시 샘플 계정과 샘플 글 자동 생성
+
+## 주요 화면 URL
+
+- `/`: 홈
+- `/login`: 로그인
+- `/signup`: 회원가입
+- `/boards`: 전체 게시판
+- `/boards/team`: 팀플 게시판
+- `/boards/meal`: 밥 매칭 게시판
+- `/boards/roommate`: 룸메 게시판
+- `/boards/global`: 외국인 교류 게시판
+- `/posts/new`: 글 작성
+- `/posts/:id`: 글 상세
+- `/posts/:id/edit`: 글 수정
 
 ## 로컬 실행
 
@@ -222,6 +238,19 @@ VITE_API_BASE_URL=https://your-render-service.onrender.com
 - `DELETE /api/posts/:id`
 - `POST /api/ai/recommend`
 
+`GET /api/posts?category=team`처럼 카테고리 필터를 사용할 수 있습니다. 내부 저장값은 기존 데이터 호환을 위해 팀플 글을 `teamplay`로 유지하고, API에서 `team` alias를 지원합니다.
+
+게시글 연락 수단 필드:
+
+```json
+{
+  "contactType": "kakao | instagram | phone | email | openchat",
+  "contactValue": "사용자가 입력한 연락처"
+}
+```
+
+기존 글처럼 연락 수단 필드가 없는 데이터는 화면에서 `연락처 없음`으로 표시됩니다.
+
 ## 배포 후 테스트 체크리스트
 
 1. Render `/api/health` 응답에서 `mongo: connected` 확인
@@ -234,7 +263,9 @@ VITE_API_BASE_URL=https://your-render-service.onrender.com
 8. 작성자 계정으로 수정
 9. 작성자 계정으로 삭제
 10. 글 작성 화면에서 AI 추천 버튼 동작 확인
-11. 브라우저 개발자 도구 Console/CORS 오류가 없는지 확인
+11. `/boards/team`, `/boards/meal`, `/boards/roommate`, `/boards/global` 직접 접속 확인
+12. 연락 수단이 상세 페이지에 표시되는지 확인
+13. 브라우저 개발자 도구 Console/CORS 오류가 없는지 확인
 
 ## 자주 나는 배포 오류
 

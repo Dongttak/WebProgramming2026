@@ -14,6 +14,8 @@ load_dotenv()
 
 PASSWORD_HASH_METHOD = "pbkdf2:sha256"
 CATEGORIES = {"teamplay", "meal", "roommate", "global"}
+CATEGORY_ALIASES = {"team": "teamplay", "teamplay": "teamplay", "meal": "meal", "roommate": "roommate", "global": "global"}
+CONTACT_TYPES = {"", "kakao", "instagram", "phone", "email", "openchat"}
 CATEGORY_LABELS = {
     "teamplay": "팀플",
     "meal": "밥",
@@ -63,6 +65,8 @@ def serialize_post(post):
         "keywords": post.get("keywords", ""),
         "location": post.get("location", ""),
         "meeting_time": post.get("meeting_time", ""),
+        "contactType": post.get("contactType", post.get("contact_type", "")),
+        "contactValue": post.get("contactValue", post.get("contact_value", "")),
         "author_id": str(post["author_id"]),
         "author_name": post.get("author_name", "익명"),
         "created_at": post["created_at"].isoformat(),
@@ -98,7 +102,8 @@ def login_required(view):
 def validate_post_payload(payload):
     title = (payload.get("title") or "").strip()
     content = (payload.get("content") or "").strip()
-    category = payload.get("category")
+    category = CATEGORY_ALIASES.get(payload.get("category"), payload.get("category"))
+    contact_type = (payload.get("contactType") or "").strip()
 
     if not title:
         return None, "제목을 입력해주세요."
@@ -106,6 +111,8 @@ def validate_post_payload(payload):
         return None, "내용을 입력해주세요."
     if category not in CATEGORIES:
         return None, "지원하지 않는 카테고리입니다."
+    if contact_type not in CONTACT_TYPES:
+        return None, "지원하지 않는 연락 수단입니다."
 
     return {
         "title": title,
@@ -114,6 +121,8 @@ def validate_post_payload(payload):
         "keywords": (payload.get("keywords") or "").strip(),
         "location": (payload.get("location") or "").strip(),
         "meeting_time": (payload.get("meeting_time") or "").strip(),
+        "contactType": contact_type,
+        "contactValue": (payload.get("contactValue") or "").strip(),
     }, None
 
 
@@ -148,6 +157,8 @@ def seed_sample_data():
             "keywords": "React, 발표, GitHub",
             "location": "중앙도서관 스터디룸",
             "meeting_time": "화/목 18시 이후",
+            "contactType": "openchat",
+            "contactValue": "웹프팀플방",
         },
         {
             "title": "오늘 학생식당에서 같이 저녁 먹을 사람",
@@ -156,6 +167,8 @@ def seed_sample_data():
             "keywords": "저녁, 학생식당, 번개",
             "location": "학생식당",
             "meeting_time": "오늘 18:30",
+            "contactType": "kakao",
+            "contactValue": "itda_meal",
         },
         {
             "title": "조용하고 깔끔한 룸메이트 찾습니다",
@@ -164,6 +177,8 @@ def seed_sample_data():
             "keywords": "기숙사, 조용함, 청결",
             "location": "학교 근처",
             "meeting_time": "이번 주 상담 가능",
+            "contactType": "email",
+            "contactValue": "sample@itda.test",
         },
         {
             "title": "한국어/영어 언어교환 친구 구해요",
@@ -172,6 +187,8 @@ def seed_sample_data():
             "keywords": "영어, 한국어, 카페",
             "location": "교내 카페",
             "meeting_time": "수요일 오후",
+            "contactType": "instagram",
+            "contactValue": "@itda_global",
         },
     ]
 
@@ -278,6 +295,7 @@ def list_posts():
     query = {}
 
     if category:
+        category = CATEGORY_ALIASES.get(category, category)
         if category not in CATEGORIES:
             return error("지원하지 않는 카테고리입니다.")
         query["category"] = category
@@ -375,7 +393,8 @@ def remove_post(user, post_id):
 @app.post("/api/ai/recommend")
 def ai_recommend():
     payload = request.get_json(silent=True) or {}
-    category = payload.get("category") if payload.get("category") in CATEGORIES else "teamplay"
+    requested_category = CATEGORY_ALIASES.get(payload.get("category"), payload.get("category"))
+    category = requested_category if requested_category in CATEGORIES else "teamplay"
     label = CATEGORY_LABELS[category]
     raw_keywords = (payload.get("keywords") or "").strip()
     keywords = raw_keywords or "시간 맞는 사람, 부담 없는 만남"
