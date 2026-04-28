@@ -68,7 +68,10 @@ const roommateFields = [
   { key: "homeVisit", label: "본가가는 주기", options: ["주말", "2주", "한달", "방학"] },
   { key: "bug", label: "벌레", options: ["극혐", "못잡음", "중간", "잡음"] },
   { key: "sleepHabit", label: "잠버릇", options: ["없음", "이갈이", "잠꼬대", "코골이"] },
-  { key: "mbti", label: "MBTI", options: ["E", "I", "S", "N", "F", "T", "P", "J"] },
+  { key: "mbtiEI", label: "MBTI E/I", options: ["E", "I"] },
+  { key: "mbtiSN", label: "MBTI S/N", options: ["S", "N"] },
+  { key: "mbtiTF", label: "MBTI T/F", options: ["T", "F"] },
+  { key: "mbtiJP", label: "MBTI J/P", options: ["J", "P"] },
   { key: "heat", label: "추위", options: ["별로", "중간", "많이"] },
   { key: "cold", label: "더위", options: ["별로", "중간", "많이"] },
 ];
@@ -96,14 +99,21 @@ function contactLabel(value) {
 }
 
 function roommateSummary(checklist = {}) {
+  const mbti =
+    checklist.mbti ||
+    [checklist.mbtiEI, checklist.mbtiSN, checklist.mbtiTF, checklist.mbtiJP]
+      .filter(Boolean)
+      .join("");
   const selected = roommateFields
+    .filter((field) => !field.key.startsWith("mbti"))
     .map((field) => {
       const value = checklist?.[field.key];
       return value ? `${field.label} ${value}` : "";
     })
     .filter(Boolean);
 
-  return selected.length > 0 ? selected.slice(0, 5).join(" · ") : "룸메 체크리스트 미작성";
+  const summary = mbti.length === 4 ? [`MBTI ${mbti}`, ...selected] : selected;
+  return summary.length > 0 ? summary.slice(0, 5).join(" · ") : "룸메 체크리스트 미작성";
 }
 
 function formatDate(value) {
@@ -434,7 +444,7 @@ function BoardPage({ user }) {
   );
 }
 
-function PostFormPage({ user, showToast }) {
+function PostFormPage({ authReady, user, showToast }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
@@ -443,9 +453,9 @@ function PostFormPage({ user, showToast }) {
   const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
-    if (user || !isEdit) return;
+    if (!authReady || user || !isEdit) return;
     navigate("/login");
-  }, [isEdit, navigate, user]);
+  }, [authReady, isEdit, navigate, user]);
 
   useEffect(() => {
     let alive = true;
@@ -478,6 +488,14 @@ function PostFormPage({ user, showToast }) {
       alive = false;
     };
   }, [id, isEdit, showToast]);
+
+  if (!authReady) {
+    return (
+      <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">
+        로그인 상태를 확인하는 중...
+      </section>
+    );
+  }
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -766,7 +784,7 @@ function PostDetailPage({ user, showToast }) {
   );
 }
 
-function AppRoutes({ user, loading, serverStatus, onAuthSubmit, onLogout, showToast }) {
+function AppRoutes({ authReady, user, loading, serverStatus, onAuthSubmit, onLogout, showToast }) {
   return (
     <PageShell user={user} onLogout={onLogout}>
       <Routes>
@@ -775,9 +793,9 @@ function AppRoutes({ user, loading, serverStatus, onAuthSubmit, onLogout, showTo
         <Route path="/signup" element={<AuthPage loading={loading} mode="register" onSubmit={onAuthSubmit} />} />
         <Route path="/boards" element={<BoardPage user={user} />} />
         <Route path="/boards/:boardSlug" element={<BoardPage user={user} />} />
-        <Route path="/posts/new" element={<PostFormPage showToast={showToast} user={user} />} />
+        <Route path="/posts/new" element={<PostFormPage authReady={authReady} showToast={showToast} user={user} />} />
         <Route path="/posts/:id" element={<PostDetailPage showToast={showToast} user={user} />} />
-        <Route path="/posts/:id/edit" element={<PostFormPage showToast={showToast} user={user} />} />
+        <Route path="/posts/:id/edit" element={<PostFormPage authReady={authReady} showToast={showToast} user={user} />} />
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>
     </PageShell>
@@ -787,6 +805,7 @@ function AppRoutes({ user, loading, serverStatus, onAuthSubmit, onLogout, showTo
 function AppInner() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
   const [serverStatus, setServerStatus] = useState("확인 중...");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "success" });
@@ -809,6 +828,8 @@ function AppInner() {
         setUser(data.user);
       } catch {
         setUser(null);
+      } finally {
+        setAuthReady(true);
       }
     }
     boot();
@@ -842,6 +863,7 @@ function AppInner() {
     <>
       <Toast toast={toast} onClose={() => setToast({ message: "", type: "success" })} />
       <AppRoutes
+        authReady={authReady}
         loading={loading}
         onAuthSubmit={handleAuthSubmit}
         onLogout={handleLogout}
