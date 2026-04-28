@@ -24,7 +24,7 @@ import {
 } from "./services/api";
 
 const categories = [
-  { slug: "team", value: "team", aliases: ["teamplay"], label: "팀플", icon: "TP", description: "과제와 프로젝트 팀원 찾기" },
+  { slug: "team", value: "teamplay", aliases: ["team"], label: "팀플", icon: "TP", description: "과제와 프로젝트 팀원 찾기" },
   { slug: "meal", value: "meal", aliases: [], label: "밥", icon: "ME", description: "점심, 저녁, 번개 식사 메이트 찾기" },
   { slug: "roommate", value: "roommate", aliases: [], label: "룸메", icon: "RM", description: "생활 패턴이 맞는 룸메이트 찾기" },
   { slug: "global", value: "global", aliases: [], label: "외국인 교류", icon: "GL", description: "언어 교환과 문화 교류 친구 찾기" },
@@ -41,14 +41,37 @@ const contactTypes = [
 
 const emptyPost = {
   title: "",
-  category: "team",
+  category: "teamplay",
   location: "",
   meeting_time: "",
   keywords: "",
   contactType: "",
   contactValue: "",
+  roommateChecklist: {},
   content: "",
 };
+
+const roommateFields = [
+  { key: "gender", label: "성별", options: ["남자", "여자", "상관없음"] },
+  { key: "grade", label: "학번", options: ["22", "23", "24", "25", "26", "상관없음"] },
+  { key: "majorGroup", label: "단과", options: ["인문", "사회", "경영경제", "공과", "예체능", "상관없음"] },
+  { key: "wakeTime", label: "기상시간", options: ["6", "7", "8", "9", "10", "오후", "맞춰서"] },
+  { key: "sleepTime", label: "취침시간", options: ["10", "11", "12", "1", "2", "3", "맞춰서"] },
+  { key: "showerTime", label: "샤워시간", options: ["아침", "저녁", "유동적"] },
+  { key: "cleaning", label: "청소", options: ["그때그때", "중간중간", "한번에"] },
+  { key: "alarm", label: "알람", options: ["잠만보", "중간", "잘들어요"] },
+  { key: "smoking", label: "흡연여부", options: ["흡연", "비흡연", "전담"] },
+  { key: "drinking", label: "음주빈도", options: ["안마심", "보통", "자주", "매일"] },
+  { key: "guest", label: "친구초대", options: ["상관없음", "싫어요", "사전허락"] },
+  { key: "study", label: "공부", options: ["기숙사", "도서관", "유동적"] },
+  { key: "nightMeal", label: "야식", options: ["안먹음", "별로", "중간", "상관없음"] },
+  { key: "homeVisit", label: "본가가는 주기", options: ["주말", "2주", "한달", "방학"] },
+  { key: "bug", label: "벌레", options: ["극혐", "못잡음", "중간", "잡음"] },
+  { key: "sleepHabit", label: "잠버릇", options: ["없음", "이갈이", "잠꼬대", "코골이"] },
+  { key: "mbti", label: "MBTI", options: ["E", "I", "S", "N", "F", "T", "P", "J"] },
+  { key: "heat", label: "추위", options: ["별로", "중간", "많이"] },
+  { key: "cold", label: "더위", options: ["별로", "중간", "많이"] },
+];
 
 function categoryFromSlug(slug) {
   return categories.find((category) => category.slug === slug) ?? null;
@@ -70,6 +93,17 @@ function categoryIcon(value) {
 
 function contactLabel(value) {
   return contactTypes.find((type) => type.value === value)?.label ?? "연락처";
+}
+
+function roommateSummary(checklist = {}) {
+  const selected = roommateFields
+    .map((field) => {
+      const value = checklist?.[field.key];
+      return value ? `${field.label} ${value}` : "";
+    })
+    .filter(Boolean);
+
+  return selected.length > 0 ? selected.slice(0, 5).join(" · ") : "룸메 체크리스트 미작성";
 }
 
 function formatDate(value) {
@@ -387,6 +421,11 @@ function BoardPage({ user }) {
                 {post.meeting_time && <span>시간 {post.meeting_time}</span>}
                 <span>{post.contactValue ? `${contactLabel(post.contactType)} 가능` : "연락처 없음"}</span>
               </div>
+              {post.category === "roommate" && (
+                <div className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium leading-5 text-emerald-800">
+                  {roommateSummary(post.roommateChecklist)}
+                </div>
+              )}
             </button>
           ))}
         </div>
@@ -422,9 +461,10 @@ function PostFormPage({ user, showToast }) {
           setForm({
             ...emptyPost,
             ...data.post,
-            category: data.post.category === "teamplay" ? "team" : data.post.category,
+            category: data.post.category === "team" ? "teamplay" : data.post.category,
             contactType: data.post.contactType ?? "",
             contactValue: data.post.contactValue ?? "",
+            roommateChecklist: data.post.roommateChecklist ?? {},
           });
         }
       } catch (error) {
@@ -443,6 +483,16 @@ function PostFormPage({ user, showToast }) {
 
   function handleChange(event) {
     setForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
+  }
+
+  function handleRoommateChoice(key, value) {
+    setForm((prev) => ({
+      ...prev,
+      roommateChecklist: {
+        ...(prev.roommateChecklist ?? {}),
+        [key]: prev.roommateChecklist?.[key] === value ? "" : value,
+      },
+    }));
   }
 
   async function handleRecommend() {
@@ -502,6 +552,46 @@ function PostFormPage({ user, showToast }) {
             <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="keywords" onChange={handleChange} placeholder="예: React, 발표, 화요일 저녁" value={form.keywords} />
           </label>
         </div>
+
+        {form.category === "roommate" && (
+          <section className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-emerald-700">룸메 체크리스트</p>
+                <h3 className="mt-1 text-xl font-black text-slate-950">생활 패턴을 골라주세요</h3>
+              </div>
+              <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700">
+                선택한 항목은 다시 누르면 해제
+              </span>
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {roommateFields.map((field) => (
+                <div className="rounded-lg border border-emerald-100 bg-white p-4 shadow-sm" key={field.key}>
+                  <p className="font-bold text-slate-900">{field.label}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {field.options.map((option) => {
+                      const selected = form.roommateChecklist?.[field.key] === option;
+                      return (
+                        <button
+                          className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition hover:-translate-y-0.5 active:scale-[0.97] ${
+                            selected
+                              ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                              : "border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50"
+                          }`}
+                          key={option}
+                          onClick={() => handleRoommateChoice(field.key, option)}
+                          type="button"
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <button className="w-fit rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:bg-slate-400" disabled={aiLoading} onClick={handleRecommend} type="button">
           {aiLoading ? "추천 생성 중..." : "AI 추천 받기"}
@@ -643,6 +733,33 @@ function PostDetailPage({ user, showToast }) {
           </dd>
         </div>
       </dl>
+
+      {post.category === "roommate" && (
+        <section className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50/70 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-black text-emerald-700">ROOMMATE CHECKLIST</p>
+              <h3 className="mt-1 text-xl font-black text-slate-950">룸메 생활 패턴</h3>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700">
+              {roommateSummary(post.roommateChecklist)}
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {roommateFields.map((field) => {
+              const value = post.roommateChecklist?.[field.key];
+              return (
+                <div className="rounded-md border border-emerald-100 bg-white px-4 py-3" key={field.key}>
+                  <p className="text-xs font-bold text-slate-500">{field.label}</p>
+                  <p className={`mt-1 font-bold ${value ? "text-slate-950" : "text-slate-400"}`}>
+                    {value || "미선택"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <p className="mt-6 whitespace-pre-wrap text-base leading-8 text-slate-700">{post.content}</p>
     </section>
