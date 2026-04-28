@@ -34,6 +34,10 @@ ROOMMATE_CHECKLIST_FIELDS = {
     "bug",
     "sleepHabit",
     "mbti",
+    "mbtiEI",
+    "mbtiSN",
+    "mbtiTF",
+    "mbtiJP",
     "heat",
     "cold",
 }
