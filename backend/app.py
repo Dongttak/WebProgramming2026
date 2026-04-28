@@ -6,6 +6,7 @@ from bson import ObjectId
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, session
 from flask_cors import CORS
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -66,6 +67,7 @@ client = MongoClient(mongo_uri, serverSelectionTimeoutMS=3000)
 db = client.get_default_database()
 users = db.users
 posts = db.posts
+token_serializer = URLSafeTimedSerializer(app.secret_key)
 
 
 def now():
@@ -79,6 +81,18 @@ def serialize_user(user):
         "email": user["email"],
         "major": user.get("major", ""),
     }
+
+
+def make_auth_token(user_id):
+    return token_serializer.dumps({"user_id": str(user_id)}, salt="itda-auth")
+
+
+def user_from_token(token):
+    try:
+        data = token_serializer.loads(token, salt="itda-auth", max_age=60 * 60 * 24 * 14)
+        return users.find_one({"_id": ObjectId(data["user_id"])})
+    except (BadSignature, SignatureExpired, KeyError, TypeError, ValueError):
+        return None
 
 
 def serialize_post(post):
@@ -106,12 +120,19 @@ def error(message, status=400):
 
 def current_user():
     user_id = session.get("user_id")
-    if not user_id:
-        return None
-    try:
-        return users.find_one({"_id": ObjectId(user_id)})
-    except Exception:
-        return None
+    if user_id:
+        try:
+            user = users.find_one({"_id": ObjectId(user_id)})
+            if user:
+                return user
+        except Exception:
+            pass
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return user_from_token(auth_header.removeprefix("Bearer ").strip())
+
+    return None
 
 
 def login_required(view):
@@ -306,7 +327,7 @@ def register():
     ).inserted_id
     session["user_id"] = str(user_id)
     user = users.find_one({"_id": user_id})
-    return jsonify({"user": serialize_user(user)}), 201
+    return jsonify({"token": make_auth_token(user_id), "user": serialize_user(user)}), 201
 
 
 @app.post("/api/auth/login")
@@ -320,7 +341,7 @@ def login():
         return error("이메일 또는 비밀번호가 올바르지 않습니다.", 401)
 
     session["user_id"] = str(user["_id"])
-    return jsonify({"user": serialize_user(user)})
+    return jsonify({"token": make_auth_token(user["_id"]), "user": serialize_user(user)})
 
 
 @app.post("/api/auth/logout")
