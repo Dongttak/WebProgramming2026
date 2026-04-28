@@ -16,6 +16,27 @@ PASSWORD_HASH_METHOD = "pbkdf2:sha256"
 CATEGORIES = {"teamplay", "meal", "roommate", "global"}
 CATEGORY_ALIASES = {"team": "teamplay", "teamplay": "teamplay", "meal": "meal", "roommate": "roommate", "global": "global"}
 CONTACT_TYPES = {"", "kakao", "instagram", "phone", "email", "openchat"}
+ROOMMATE_CHECKLIST_FIELDS = {
+    "gender",
+    "grade",
+    "majorGroup",
+    "wakeTime",
+    "sleepTime",
+    "showerTime",
+    "cleaning",
+    "alarm",
+    "smoking",
+    "drinking",
+    "guest",
+    "study",
+    "nightMeal",
+    "homeVisit",
+    "bug",
+    "sleepHabit",
+    "mbti",
+    "heat",
+    "cold",
+}
 CATEGORY_LABELS = {
     "teamplay": "팀플",
     "meal": "밥",
@@ -67,6 +88,7 @@ def serialize_post(post):
         "meeting_time": post.get("meeting_time", ""),
         "contactType": post.get("contactType", post.get("contact_type", "")),
         "contactValue": post.get("contactValue", post.get("contact_value", "")),
+        "roommateChecklist": post.get("roommateChecklist", {}),
         "author_id": str(post["author_id"]),
         "author_name": post.get("author_name", "익명"),
         "created_at": post["created_at"].isoformat(),
@@ -104,6 +126,7 @@ def validate_post_payload(payload):
     content = (payload.get("content") or "").strip()
     category = CATEGORY_ALIASES.get(payload.get("category"), payload.get("category"))
     contact_type = (payload.get("contactType") or "").strip()
+    raw_roommate_checklist = payload.get("roommateChecklist") or {}
 
     if not title:
         return None, "제목을 입력해주세요."
@@ -113,6 +136,14 @@ def validate_post_payload(payload):
         return None, "지원하지 않는 카테고리입니다."
     if contact_type not in CONTACT_TYPES:
         return None, "지원하지 않는 연락 수단입니다."
+    if not isinstance(raw_roommate_checklist, dict):
+        return None, "룸메 체크리스트 형식이 올바르지 않습니다."
+
+    roommate_checklist = {
+        key: str(value).strip()
+        for key, value in raw_roommate_checklist.items()
+        if key in ROOMMATE_CHECKLIST_FIELDS and str(value).strip()
+    }
 
     return {
         "title": title,
@@ -123,6 +154,7 @@ def validate_post_payload(payload):
         "meeting_time": (payload.get("meeting_time") or "").strip(),
         "contactType": contact_type,
         "contactValue": (payload.get("contactValue") or "").strip(),
+        "roommateChecklist": roommate_checklist if category == "roommate" else {},
     }, None
 
 
@@ -179,6 +211,19 @@ def seed_sample_data():
             "meeting_time": "이번 주 상담 가능",
             "contactType": "email",
             "contactValue": "sample@itda.test",
+            "roommateChecklist": {
+                "gender": "상관없음",
+                "wakeTime": "8",
+                "sleepTime": "12",
+                "showerTime": "저녁",
+                "cleaning": "중간중간",
+                "alarm": "잘들어요",
+                "smoking": "비흡연",
+                "guest": "사전허락",
+                "study": "도서관",
+                "nightMeal": "별로",
+                "bug": "못잡음",
+            },
         },
         {
             "title": "한국어/영어 언어교환 친구 구해요",
