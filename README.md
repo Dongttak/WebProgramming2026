@@ -26,7 +26,7 @@ WebProgramming2026/
 ## 구현된 기능
 
 - 회원가입, 로그인, 로그아웃
-- Flask 세션 쿠키 기반 로그인 상태 유지
+- Flask 세션 쿠키와 Bearer 토큰 기반 로그인 상태 유지
 - MongoDB 기반 매칭 글 CRUD
 - 카테고리: 팀플, 밥, 룸메, 외국인 교류
 - React Router 기반 페이지 URL
