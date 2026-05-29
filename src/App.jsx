@@ -8,10 +8,13 @@ import {
   Routes,
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import {
+  createApplication,
   createPost,
   deletePost,
+  getApplications,
   getCurrentUser,
   getHealth,
   getPost,
@@ -20,7 +23,10 @@ import {
   logout,
   register,
   requestAiRecommendation,
-  updatePost,
+  requestSchoolEmailCode,
+  updateApplicationStatus,
+  updateProfile,
+  verifySchoolEmailCode,
 } from "./services/api";
 
 const categories = [
@@ -47,6 +53,7 @@ const emptyPost = {
   keywords: "",
   contactType: "",
   contactValue: "",
+  everytimePostUrl: "",
   roommateChecklist: {},
   content: "",
 };
@@ -81,21 +88,37 @@ function categoryFromSlug(slug) {
 }
 
 function categoryLabel(value) {
-  return (
-    categories.find((category) => category.value === value || category.aliases.includes(value))
-      ?.label ?? value
-  );
+  return categories.find((category) => category.value === value || category.aliases.includes(value))?.label ?? value;
 }
 
 function categoryIcon(value) {
-  return (
-    categories.find((category) => category.value === value || category.aliases.includes(value))
-      ?.icon ?? "IT"
-  );
+  return categories.find((category) => category.value === value || category.aliases.includes(value))?.icon ?? "IT";
 }
 
 function contactLabel(value) {
   return contactTypes.find((type) => type.value === value)?.label ?? "연락처";
+}
+
+function profileCompleted(user) {
+  return Boolean(
+    user?.studentId &&
+      user?.gender &&
+      user?.profileText &&
+      user?.everytimeNickname &&
+      user?.everytimeVerified &&
+      user?.schoolEmail &&
+      user?.schoolEmailVerified &&
+      user?.contactType &&
+      user?.contactValue,
+  );
+}
+
+function splitTags(value = "") {
+  return value
+    .replaceAll("#", ",")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
 }
 
 function roommateSummary(checklist = {}) {
@@ -140,11 +163,7 @@ function Toast({ toast, onClose }) {
       ? "border-red-200 bg-red-50 text-red-700"
       : "border-emerald-200 bg-emerald-50 text-emerald-700";
 
-  return (
-    <div className={`fixed right-5 top-5 z-50 max-w-sm rounded-lg border px-4 py-3 text-sm shadow-lg ${tone}`}>
-      {toast.message}
-    </div>
-  );
+  return <div className={`fixed right-5 top-5 z-50 max-w-sm rounded-lg border px-4 py-3 text-sm shadow-lg ${tone}`}>{toast.message}</div>;
 }
 
 function PageShell({ children, user, onLogout }) {
@@ -162,36 +181,21 @@ function PageShell({ children, user, onLogout }) {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-600">ITDA</p>
           </Link>
           <nav className="flex flex-wrap items-center gap-2">
-            <NavLink className={navClass} to="/" end>
-              홈
-            </NavLink>
-            <NavLink className={navClass} to="/boards">
-              게시판
-            </NavLink>
-            <NavLink className={navClass} to="/posts/new">
-              글 작성
-            </NavLink>
+            <NavLink className={navClass} to="/" end>홈</NavLink>
+            <NavLink className={navClass} to="/boards">게시판</NavLink>
+            <NavLink className={navClass} to="/posts/new">글 작성</NavLink>
+            {user && <NavLink className={navClass} to="/profile">내 정보</NavLink>}
             {user ? (
               <>
-                <span className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">
-                  {user.name}
-                </span>
-                <button
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[0.98]"
-                  onClick={onLogout}
-                  type="button"
-                >
+                <span className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">{user.name}</span>
+                <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[0.98]" onClick={onLogout} type="button">
                   로그아웃
                 </button>
               </>
             ) : (
               <>
-                <NavLink className={navClass} to="/login">
-                  로그인
-                </NavLink>
-                <NavLink className={navClass} to="/signup">
-                  회원가입
-                </NavLink>
+                <NavLink className={navClass} to="/login">로그인</NavLink>
+                <NavLink className={navClass} to="/signup">회원가입</NavLink>
               </>
             )}
           </nav>
@@ -207,29 +211,14 @@ function HomePage({ serverStatus, user }) {
     <section className="space-y-8">
       <div className="grid gap-6 rounded-lg border border-slate-200 bg-white p-8 shadow-sm lg:grid-cols-[1.2fr_0.8fr]">
         <div>
-          <span className="inline-flex rounded-md bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-700">
-            ITDA Matching MVP
-          </span>
-          <h1 className="mt-5 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
-            캠퍼스 연결을 더 쉽게
-          </h1>
+          <span className="inline-flex rounded-md bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-700">ITDA Matching MVP</span>
+          <h1 className="mt-5 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">캠퍼스 연결을 더 쉽게</h1>
           <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
-            팀플, 밥, 룸메, 외국인 교류까지 목적별 게시판에서 필요한 사람을 빠르게 찾는
-            대학생 매칭 서비스입니다.
+            팀플, 밥, 룸메, 외국인 교류까지 목적별 게시판에서 필요한 사람을 빠르게 찾는 대학생 매칭 서비스입니다.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              className="rounded-md bg-slate-950 px-5 py-3 font-semibold text-white transition hover:bg-slate-800 active:scale-[0.98]"
-              to="/boards"
-            >
-              전체 게시판 보기
-            </Link>
-            <Link
-              className="rounded-md border border-slate-300 px-5 py-3 font-semibold text-slate-800 transition hover:bg-slate-50 active:scale-[0.98]"
-              to={user ? "/posts/new" : "/login"}
-            >
-              매칭 글 작성
-            </Link>
+            <Link className="rounded-md bg-slate-950 px-5 py-3 font-semibold text-white transition hover:bg-slate-800 active:scale-[0.98]" to="/boards">전체 게시판 보기</Link>
+            <Link className="rounded-md border border-slate-300 px-5 py-3 font-semibold text-slate-800 transition hover:bg-slate-50 active:scale-[0.98]" to={user ? "/posts/new" : "/login"}>매칭 글 작성</Link>
           </div>
         </div>
         <div className="rounded-lg bg-slate-50 p-5">
@@ -237,15 +226,9 @@ function HomePage({ serverStatus, user }) {
           <p className="mt-2 text-lg font-bold text-slate-950">{serverStatus}</p>
           <div className="mt-5 grid gap-3">
             {categories.map((category) => (
-              <Link
-                className="group rounded-md border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-1 hover:border-sky-300 hover:shadow-md active:scale-[0.99]"
-                key={category.slug}
-                to={`/boards/${category.slug}`}
-              >
+              <Link className="group rounded-md border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-1 hover:border-sky-300 hover:shadow-md active:scale-[0.99]" key={category.slug} to={`/boards/${category.slug}`}>
                 <div className="flex items-start gap-3">
-                  <span className="rounded-md bg-sky-100 px-2 py-1 text-xs font-black text-sky-700 transition group-hover:bg-sky-600 group-hover:text-white">
-                    {category.icon}
-                  </span>
+                  <span className="rounded-md bg-sky-100 px-2 py-1 text-xs font-black text-sky-700 transition group-hover:bg-sky-600 group-hover:text-white">{category.icon}</span>
                   <div>
                     <p className="font-bold text-slate-950">{category.label}</p>
                     <p className="mt-1 text-sm text-slate-500">{category.description}</p>
@@ -316,28 +299,12 @@ function AuthPage({ mode, loading, onSubmit }) {
 function BoardTabs({ activeSlug }) {
   return (
     <div className="grid gap-3 md:grid-cols-5">
-      <NavLink
-        className={({ isActive }) =>
-          `rounded-lg border p-4 transition hover:-translate-y-1 hover:shadow-md active:scale-[0.99] ${
-            isActive && !activeSlug ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-800"
-          }`
-        }
-        to="/boards"
-        end
-      >
+      <NavLink className={({ isActive }) => `rounded-lg border p-4 transition hover:-translate-y-1 hover:shadow-md active:scale-[0.99] ${isActive && !activeSlug ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-800"}`} to="/boards" end>
         <span className="text-xs font-black">ALL</span>
         <p className="mt-2 font-bold">전체</p>
       </NavLink>
       {categories.map((category) => (
-        <NavLink
-          className={({ isActive }) =>
-            `rounded-lg border p-4 transition hover:-translate-y-1 hover:shadow-md active:scale-[0.99] ${
-              isActive ? "border-sky-500 bg-sky-50 text-sky-800" : "border-slate-200 bg-white text-slate-800"
-            }`
-          }
-          key={category.slug}
-          to={`/boards/${category.slug}`}
-        >
+        <NavLink className={({ isActive }) => `rounded-lg border p-4 transition hover:-translate-y-1 hover:shadow-md active:scale-[0.99] ${isActive ? "border-sky-500 bg-sky-50 text-sky-800" : "border-slate-200 bg-white text-slate-800"}`} key={category.slug} to={`/boards/${category.slug}`}>
           <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black">{category.icon}</span>
           <p className="mt-3 font-bold">{category.label}</p>
         </NavLink>
@@ -349,20 +316,27 @@ function BoardTabs({ activeSlug }) {
 function BoardPage({ user }) {
   const { boardSlug } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const activeCategory = categoryFromSlug(boardSlug);
   const [posts, setPosts] = useState([]);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setQ(searchParams.get("q") ?? "");
+  }, [searchParams]);
+
+  function updateSearch(value) {
+    setQ(value);
+    setSearchParams(value ? { q: value } : {});
+  }
 
   useEffect(() => {
     let alive = true;
     async function load() {
       setLoading(true);
       try {
-        const data = await getPosts({
-          category: activeCategory?.value ?? "",
-          q,
-        });
+        const data = await getPosts({ category: activeCategory?.value ?? "", q });
         if (alive) setPosts(data.posts);
       } finally {
         if (alive) setLoading(false);
@@ -378,28 +352,16 @@ function BoardPage({ user }) {
     <section className="space-y-5">
       <div className="flex flex-col justify-between gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end">
         <div>
-          <h2 className="text-2xl font-bold text-slate-950">
-            {activeCategory ? `${activeCategory.label} 게시판` : "전체 게시판"}
-          </h2>
+          <h2 className="text-2xl font-bold text-slate-950">{activeCategory ? `${activeCategory.label} 게시판` : "전체 게시판"}</h2>
           <p className="mt-1 text-sm text-slate-500">카테고리별로 매칭 글을 둘러보고 연락해보세요.</p>
         </div>
-        <Link
-          className="rounded-md bg-sky-600 px-4 py-2 text-center font-semibold text-white transition hover:bg-sky-700 active:scale-[0.98]"
-          to={user ? "/posts/new" : "/login"}
-        >
-          새 글 작성
-        </Link>
+        <Link className="rounded-md bg-sky-600 px-4 py-2 text-center font-semibold text-white transition hover:bg-sky-700 active:scale-[0.98]" to={user ? "/posts/new" : "/login"}>새 글 작성</Link>
       </div>
 
       <BoardTabs activeSlug={boardSlug} />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
-        <input
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950 outline-none focus:border-sky-500"
-          onChange={(event) => setQ(event.target.value)}
-          placeholder="제목, 내용, 키워드 검색"
-          value={q}
-        />
+        <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950 outline-none focus:border-sky-500" onChange={(event) => updateSearch(event.target.value)} placeholder="제목, 내용, 키워드 검색" value={q} />
       </div>
 
       {loading ? (
@@ -409,17 +371,10 @@ function BoardPage({ user }) {
       ) : (
         <div className="grid gap-4">
           {posts.map((post) => (
-            <button
-              className="group rounded-lg border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-sky-300 hover:shadow-md active:scale-[0.99]"
-              key={post.id}
-              onClick={() => navigate(`/posts/${post.id}`)}
-              type="button"
-            >
+            <article className="group rounded-lg border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-sky-300 hover:shadow-md active:scale-[0.99]" key={post.id} onClick={() => navigate(`/posts/${post.id}`)} onKeyDown={(event) => { if (event.key === "Enter") navigate(`/posts/${post.id}`); }} role="button" tabIndex={0}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 transition group-hover:bg-sky-100 group-hover:text-sky-700">
-                    {categoryIcon(post.category)} · {categoryLabel(post.category)}
-                  </span>
+                  <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 transition group-hover:bg-sky-100 group-hover:text-sky-700">{categoryIcon(post.category)} · {categoryLabel(post.category)}</span>
                   <h3 className="mt-3 text-xl font-bold text-slate-950">{post.title}</h3>
                 </div>
                 <p className="text-sm text-slate-400">{formatDate(post.created_at)}</p>
@@ -429,14 +384,21 @@ function BoardPage({ user }) {
                 <span>작성자 {post.author_name}</span>
                 {post.location && <span>장소 {post.location}</span>}
                 {post.meeting_time && <span>시간 {post.meeting_time}</span>}
-                <span>{post.contactValue ? `${contactLabel(post.contactType)} 가능` : "연락처 없음"}</span>
+                <span className="font-semibold text-sky-700">연락처 승인 후 공개</span>
               </div>
-              {post.category === "roommate" && (
-                <div className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium leading-5 text-emerald-800">
-                  {roommateSummary(post.roommateChecklist)}
+              {splitTags(post.keywords).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {splitTags(post.keywords).map((tag) => (
+                    <button className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-sky-100 hover:text-sky-700" key={tag} onClick={(event) => { event.stopPropagation(); updateSearch(tag); }} type="button">
+                      #{tag}
+                    </button>
+                  ))}
                 </div>
               )}
-            </button>
+              {post.category === "roommate" && (
+                <div className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium leading-5 text-emerald-800">{roommateSummary(post.roommateChecklist)}</div>
+              )}
+            </article>
           ))}
         </div>
       )}
@@ -452,52 +414,34 @@ function PostFormPage({ authReady, user, showToast }) {
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
-  useEffect(() => {
-    if (!authReady || user || !isEdit) return;
-    navigate("/login");
-  }, [authReady, isEdit, navigate, user]);
-
-  useEffect(() => {
-    let alive = true;
-    async function loadPost() {
-      if (!isEdit) {
-        setForm(emptyPost);
-        return;
-      }
-      setLoading(true);
-      try {
-        const data = await getPost(id);
-        if (alive) {
-          setForm({
-            ...emptyPost,
-            ...data.post,
-            category: data.post.category === "team" ? "teamplay" : data.post.category,
-            contactType: data.post.contactType ?? "",
-            contactValue: data.post.contactValue ?? "",
-            roommateChecklist: data.post.roommateChecklist ?? {},
-          });
-        }
-      } catch (error) {
-        showToast(error.message, "error");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    }
-    loadPost();
-    return () => {
-      alive = false;
-    };
-  }, [id, isEdit, showToast]);
-
   if (!authReady) {
+    return <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">로그인 상태를 확인하는 중...</section>;
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (isEdit) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">
-        로그인 상태를 확인하는 중...
+      <section className="rounded-lg border border-amber-200 bg-amber-50 p-8 text-center">
+        <h2 className="text-2xl font-black text-slate-950">작성 후 수정할 수 없습니다</h2>
+        <p className="mt-3 text-sm leading-6 text-amber-800">잇다는 모집 글의 신뢰도를 위해 작성 후 수정 기능을 막아두었습니다. 내용 변경이 필요하면 기존 글을 삭제한 뒤 다시 작성해주세요.</p>
+        <div className="mt-5 flex justify-center gap-2">
+          <Link className="rounded-md bg-slate-950 px-4 py-2 font-semibold text-white" to={`/posts/${id}`}>글로 돌아가기</Link>
+          <Link className="rounded-md border border-amber-300 bg-white px-4 py-2 font-semibold text-amber-800" to="/posts/new">새 글 작성</Link>
+        </div>
       </section>
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!profileCompleted(user)) {
+    return (
+      <section className="rounded-lg border border-sky-200 bg-white p-8 text-center shadow-sm">
+        <h2 className="text-2xl font-black text-slate-950">내 정보 입력이 필요합니다</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-600">글 작성과 신청 기능은 학교 이메일 인증, 에타 확인 정보, 승인 후 공개할 연락처를 입력한 뒤 사용할 수 있습니다.</p>
+        <Link className="mt-5 inline-flex rounded-md bg-sky-600 px-5 py-3 font-semibold text-white transition hover:bg-sky-700" to="/profile">내 정보 입력하기</Link>
+      </section>
+    );
+  }
 
   function handleChange(event) {
     setForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
@@ -516,10 +460,7 @@ function PostFormPage({ authReady, user, showToast }) {
   async function handleRecommend() {
     setAiLoading(true);
     try {
-      const data = await requestAiRecommendation({
-        category: form.category,
-        keywords: form.keywords,
-      });
+      const data = await requestAiRecommendation({ category: form.category, keywords: form.keywords });
       setForm((prev) => ({ ...prev, title: data.title, content: data.content }));
       showToast("AI 추천 예시를 입력했습니다.");
     } catch (error) {
@@ -533,8 +474,8 @@ function PostFormPage({ authReady, user, showToast }) {
     event.preventDefault();
     setLoading(true);
     try {
-      const data = isEdit ? await updatePost(id, form) : await createPost(form);
-      showToast(isEdit ? "글이 수정되었습니다." : "글이 작성되었습니다.");
+      const data = await createPost(form);
+      showToast("글이 작성되었습니다.");
       navigate(`/posts/${data.post.id}`);
     } catch (error) {
       showToast(error.message, "error");
@@ -547,27 +488,24 @@ function PostFormPage({ authReady, user, showToast }) {
     <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>
-          <h2 className="text-2xl font-bold text-slate-950">{isEdit ? "매칭 글 수정" : "매칭 글 작성"}</h2>
-          <p className="mt-1 text-sm text-slate-500">연락 수단을 남기면 팀원이 바로 연락할 수 있습니다.</p>
+          <h2 className="text-2xl font-bold text-slate-950">매칭 글 작성</h2>
+          <p className="mt-1 text-sm text-slate-500">연락처는 공개되지 않고 신청 승인 후에만 서로 확인할 수 있습니다.</p>
         </div>
-        <button className="rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[0.98]" onClick={() => navigate(-1)} type="button">
-          취소
-        </button>
+        <button className="rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[0.98]" onClick={() => navigate(-1)} type="button">취소</button>
       </div>
 
       <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">작성 후에는 수정할 수 없습니다. 카테고리, 태그, 에타 작성 확인, 연락처를 꼭 확인한 뒤 등록해주세요.</div>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">카테고리</span>
             <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="category" onChange={handleChange} value={form.category}>
-              {categories.map((category) => (
-                <option key={category.value} value={category.value}>{category.label}</option>
-              ))}
+              {categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
             </select>
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">키워드</span>
-            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="keywords" onChange={handleChange} placeholder="예: React, 발표, 화요일 저녁" value={form.keywords} />
+            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="keywords" onChange={handleChange} placeholder="예: React, 발표, 화요일 저녁" required value={form.keywords} />
           </label>
         </div>
 
@@ -578,9 +516,7 @@ function PostFormPage({ authReady, user, showToast }) {
                 <p className="text-sm font-black text-emerald-700">룸메 체크리스트</p>
                 <h3 className="mt-1 text-xl font-black text-slate-950">생활 패턴을 골라주세요</h3>
               </div>
-              <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700">
-                선택한 항목은 다시 누르면 해제
-              </span>
+              <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700">선택한 항목은 다시 누르면 해제</span>
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {roommateFields.map((field) => (
@@ -590,16 +526,7 @@ function PostFormPage({ authReady, user, showToast }) {
                     {field.options.map((option) => {
                       const selected = form.roommateChecklist?.[field.key] === option;
                       return (
-                        <button
-                          className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition hover:-translate-y-0.5 active:scale-[0.97] ${
-                            selected
-                              ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
-                              : "border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50"
-                          }`}
-                          key={option}
-                          onClick={() => handleRoommateChoice(field.key, option)}
-                          type="button"
-                        >
+                        <button className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition hover:-translate-y-0.5 active:scale-[0.97] ${selected ? "border-emerald-600 bg-emerald-600 text-white shadow-sm" : "border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50"}`} key={option} onClick={() => handleRoommateChoice(field.key, option)} type="button">
                           {option}
                         </button>
                       );
@@ -623,26 +550,30 @@ function PostFormPage({ authReady, user, showToast }) {
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">장소</span>
-            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="location" onChange={handleChange} placeholder="예: 중앙도서관, 학생식당" value={form.location} />
+            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="location" onChange={handleChange} placeholder="예: 중앙도서관, 학생식당" required value={form.location} />
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">희망 시간</span>
-            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="meeting_time" onChange={handleChange} placeholder="예: 월/수 18시 이후" value={form.meeting_time} />
+            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="meeting_time" onChange={handleChange} placeholder="예: 월/수 18시 이후" required value={form.meeting_time} />
           </label>
         </div>
+
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">에타 글 작성 확인</span>
+          <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="everytimePostUrl" onChange={handleChange} placeholder="예: 에타 게시글 링크, 제목, 작성 시간" required value={form.everytimePostUrl} />
+          <span className="mt-1 block text-xs text-slate-500">실제 에타 연동 대신, 과제 MVP에서는 사용자가 작성한 에타 글 정보를 기록합니다.</span>
+        </label>
 
         <div className="grid gap-4 md:grid-cols-[180px_1fr]">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">연락 수단</span>
-            <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="contactType" onChange={handleChange} value={form.contactType}>
-              {contactTypes.map((type) => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
+            <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="contactType" onChange={handleChange} required value={form.contactType}>
+              {contactTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">연락처</span>
-            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="contactValue" onChange={handleChange} placeholder="예: 오픈채팅 링크, 인스타 ID, 이메일" value={form.contactValue} />
+            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="contactValue" onChange={handleChange} placeholder="승인된 사람에게만 공개됩니다" required value={form.contactValue} />
           </label>
         </div>
 
@@ -663,6 +594,8 @@ function PostDetailPage({ user, showToast }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [post, setPost] = useState(null);
+  const [applicationsList, setApplicationsList] = useState([]);
+  const [applicationMessage, setApplicationMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -684,6 +617,26 @@ function PostDetailPage({ user, showToast }) {
     };
   }, [id, showToast]);
 
+  useEffect(() => {
+    let alive = true;
+    async function loadApplications() {
+      if (!user || !post) {
+        setApplicationsList([]);
+        return;
+      }
+      try {
+        const data = await getApplications(post.id);
+        if (alive) setApplicationsList(data.applications);
+      } catch {
+        if (alive) setApplicationsList([]);
+      }
+    }
+    loadApplications();
+    return () => {
+      alive = false;
+    };
+  }, [post, user]);
+
   async function handleDelete() {
     if (!post || !window.confirm("정말 삭제할까요?")) return;
     try {
@@ -695,62 +648,78 @@ function PostDetailPage({ user, showToast }) {
     }
   }
 
-  if (loading) {
-    return <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">불러오는 중...</section>;
+  async function handleApply(event) {
+    event.preventDefault();
+    if (!profileCompleted(user)) {
+      showToast("신청 전에 내 정보를 먼저 입력해주세요.", "error");
+      navigate("/profile");
+      return;
+    }
+    try {
+      const data = await createApplication(post.id, { message: applicationMessage });
+      setApplicationsList((prev) => [data.application, ...prev.filter((item) => item.id !== data.application.id)]);
+      setApplicationMessage("");
+      showToast("신청 댓글을 보냈습니다. 글쓴이 승인 후 연락처를 확인할 수 있습니다.");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
   }
 
-  if (!post) {
-    return <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">글을 찾을 수 없습니다.</section>;
+  async function handleApplicationStatus(applicationId, status) {
+    try {
+      const data = await updateApplicationStatus(applicationId, status);
+      setApplicationsList((prev) => prev.map((item) => (item.id === applicationId ? data.application : item)));
+      showToast(status === "approved" ? "신청을 승인했습니다." : "신청을 거절했습니다.");
+      const refreshed = await getPost(post.id);
+      setPost(refreshed.post);
+    } catch (error) {
+      showToast(error.message, "error");
+    }
   }
+
+  if (loading) return <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">불러오는 중...</section>;
+  if (!post) return <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">글을 찾을 수 없습니다.</section>;
 
   const isOwner = user && post.author_id === user.id;
   const hasContact = Boolean(post.contactType && post.contactValue);
+  const myApplication = applicationsList.find((application) => application.applicantId === user?.id);
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-      <button className="text-sm font-semibold text-sky-700 transition hover:text-sky-900" onClick={() => navigate(-1)} type="button">
-        목록으로 돌아가기
-      </button>
+      <button className="text-sm font-semibold text-sky-700 transition hover:text-sky-900" onClick={() => navigate(-1)} type="button">목록으로 돌아가기</button>
       <div className="mt-5 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>
-          <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">
-            {categoryIcon(post.category)} · {categoryLabel(post.category)}
-          </span>
+          <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">{categoryIcon(post.category)} · {categoryLabel(post.category)}</span>
           <h2 className="mt-4 text-3xl font-black text-slate-950">{post.title}</h2>
           <p className="mt-2 text-sm text-slate-500">{post.author_name} · {formatDate(post.created_at)}</p>
         </div>
         {isOwner && (
           <div className="flex gap-2">
-            <Link className="rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[0.98]" to={`/posts/${post.id}/edit`}>
-              수정
-            </Link>
-            <button className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700 active:scale-[0.98]" onClick={handleDelete} type="button">
-              삭제
-            </button>
+            <span className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">수정 불가</span>
+            <button className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700 active:scale-[0.98]" onClick={handleDelete} type="button">삭제</button>
           </div>
         )}
       </div>
 
       <dl className="mt-6 grid gap-3 rounded-lg bg-slate-50 p-4 text-sm md:grid-cols-4">
-        <div>
-          <dt className="font-semibold text-slate-500">장소</dt>
-          <dd className="mt-1 text-slate-950">{post.location || "협의"}</dd>
-        </div>
-        <div>
-          <dt className="font-semibold text-slate-500">희망 시간</dt>
-          <dd className="mt-1 text-slate-950">{post.meeting_time || "협의"}</dd>
-        </div>
-        <div>
-          <dt className="font-semibold text-slate-500">키워드</dt>
-          <dd className="mt-1 text-slate-950">{post.keywords || "없음"}</dd>
-        </div>
+        <div><dt className="font-semibold text-slate-500">장소</dt><dd className="mt-1 text-slate-950">{post.location || "협의"}</dd></div>
+        <div><dt className="font-semibold text-slate-500">희망 시간</dt><dd className="mt-1 text-slate-950">{post.meeting_time || "협의"}</dd></div>
+        <div><dt className="font-semibold text-slate-500">키워드</dt><dd className="mt-1 text-slate-950">{post.keywords || "없음"}</dd></div>
         <div>
           <dt className="font-semibold text-slate-500">연락 수단</dt>
-          <dd className={`mt-1 font-bold ${hasContact ? "text-sky-700" : "text-slate-400"}`}>
-            {hasContact ? `${contactLabel(post.contactType)} · ${post.contactValue}` : "연락처 없음"}
-          </dd>
+          <dd className={`mt-1 font-bold ${hasContact ? "text-sky-700" : "text-slate-400"}`}>{hasContact ? `${contactLabel(post.contactType)} · ${post.contactValue}` : "승인 후 공개"}</dd>
         </div>
       </dl>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {splitTags(post.keywords).map((tag) => (
+          <Link className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-sky-100 hover:text-sky-700" key={tag} to={`/boards?q=${encodeURIComponent(tag)}`}>#{tag}</Link>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        <span className="font-bold text-slate-950">에타 작성 확인:</span> {post.everytimePostUrl || "미입력"}
+      </div>
 
       {post.category === "roommate" && (
         <section className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50/70 p-5">
@@ -759,9 +728,7 @@ function PostDetailPage({ user, showToast }) {
               <p className="text-sm font-black text-emerald-700">ROOMMATE CHECKLIST</p>
               <h3 className="mt-1 text-xl font-black text-slate-950">룸메 생활 패턴</h3>
             </div>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700">
-              {roommateSummary(post.roommateChecklist)}
-            </span>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700">{roommateSummary(post.roommateChecklist)}</span>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {roommateFields.map((field) => {
@@ -769,9 +736,7 @@ function PostDetailPage({ user, showToast }) {
               return (
                 <div className="rounded-md border border-emerald-100 bg-white px-4 py-3" key={field.key}>
                   <p className="text-xs font-bold text-slate-500">{field.label}</p>
-                  <p className={`mt-1 font-bold ${value ? "text-slate-950" : "text-slate-400"}`}>
-                    {value || "미선택"}
-                  </p>
+                  <p className={`mt-1 font-bold ${value ? "text-slate-950" : "text-slate-400"}`}>{value || "미선택"}</p>
                 </div>
               );
             })}
@@ -780,17 +745,225 @@ function PostDetailPage({ user, showToast }) {
       )}
 
       <p className="mt-6 whitespace-pre-wrap text-base leading-8 text-slate-700">{post.content}</p>
+
+      {!isOwner && (
+        <section className="mt-6 rounded-lg border border-sky-200 bg-white p-5">
+          <h3 className="text-xl font-black text-slate-950">신청 댓글</h3>
+          <p className="mt-1 text-sm text-slate-500">글쓴이만 신청자의 프로필과 연락처를 확인할 수 있고, 승인 후 서로 연락처가 공개됩니다.</p>
+          {!user ? (
+            <Link className="mt-4 inline-flex rounded-md bg-sky-600 px-4 py-2 font-semibold text-white" to="/login">로그인 후 신청하기</Link>
+          ) : myApplication ? (
+            <div className="mt-4 rounded-md bg-slate-50 p-4 text-sm text-slate-700">
+              <p className="font-bold">내 신청 상태: {myApplication.status}</p>
+              <p className="mt-2 whitespace-pre-wrap">{myApplication.message}</p>
+              {myApplication.ownerContact && <p className="mt-3 font-bold text-sky-700">글쓴이 연락처: {contactLabel(myApplication.ownerContact.contactType)} · {myApplication.ownerContact.contactValue}</p>}
+            </div>
+          ) : (
+            <form className="mt-4 grid gap-3" onSubmit={handleApply}>
+              <textarea className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-slate-950" onChange={(event) => setApplicationMessage(event.target.value)} placeholder="간단한 자기소개와 신청 이유를 남겨주세요." required value={applicationMessage} />
+              <button className="rounded-md bg-sky-600 px-4 py-2 font-semibold text-white transition hover:bg-sky-700" type="submit">신청 댓글 남기기</button>
+            </form>
+          )}
+        </section>
+      )}
+
+      {isOwner && (
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
+          <h3 className="text-xl font-black text-slate-950">신청자 관리</h3>
+          <p className="mt-1 text-sm text-slate-500">글쓴이만 신청자 프로필과 연락처를 확인할 수 있습니다.</p>
+          {applicationsList.length === 0 ? (
+            <p className="mt-4 rounded-md bg-slate-50 p-4 text-sm text-slate-500">아직 신청 댓글이 없습니다.</p>
+          ) : (
+            <div className="mt-4 grid gap-3">
+              {applicationsList.map((application) => (
+                <article className="rounded-lg border border-slate-200 bg-slate-50 p-4" key={application.id}>
+                  <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                    <div>
+                      <p className="font-black text-slate-950">{application.applicant?.name || "신청자"}</p>
+                      <p className="mt-1 text-sm text-slate-600">{application.applicant?.major} · {application.applicant?.studentId} · 에타 {application.applicant?.everytimeNickname}</p>
+                      <p className="mt-2 text-sm text-slate-700">{application.applicant?.profileText}</p>
+                      <p className="mt-2 text-sm font-bold text-sky-700">연락처: {contactLabel(application.applicant?.contactType)} · {application.applicant?.contactValue}</p>
+                    </div>
+                    <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">{application.status}</span>
+                  </div>
+                  <p className="mt-3 whitespace-pre-wrap rounded-md bg-white p-3 text-sm text-slate-700">{application.message}</p>
+                  <div className="mt-3 flex gap-2">
+                    <button className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:bg-slate-300" disabled={application.status === "approved"} onClick={() => handleApplicationStatus(application.id, "approved")} type="button">승인</button>
+                    <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:bg-slate-100" disabled={application.status === "rejected"} onClick={() => handleApplicationStatus(application.id, "rejected")} type="button">거절</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </section>
   );
 }
 
-function AppRoutes({ authReady, user, loading, serverStatus, onAuthSubmit, onLogout, showToast }) {
+function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
+  const [form, setForm] = useState({
+    name: "",
+    major: "",
+    studentId: "",
+    gender: "",
+    profileText: "",
+    everytimeNickname: "",
+    everytimeVerified: false,
+    schoolEmail: "",
+    contactType: "",
+    contactValue: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [emailCode, setEmailCode] = useState("");
+  const [mockCode, setMockCode] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setForm({
+      name: user.name ?? "",
+      major: user.major ?? "",
+      studentId: user.studentId ?? "",
+      gender: user.gender ?? "",
+      profileText: user.profileText ?? "",
+      everytimeNickname: user.everytimeNickname ?? "",
+      everytimeVerified: Boolean(user.everytimeVerified),
+      schoolEmail: user.schoolEmail ?? "",
+      contactType: user.contactType ?? "",
+      contactValue: user.contactValue ?? "",
+    });
+  }, [user]);
+
+  if (!authReady) return <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">로그인 상태를 확인하는 중...</section>;
+  if (!user) return <Navigate to="/login" replace />;
+
+  function handleChange(event) {
+    const { name, type, checked, value } = event.target;
+    setForm((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const data = await updateProfile(form);
+      onProfileSaved(data.user);
+      showToast("내 정보가 저장되었습니다.");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRequestSchoolEmailCode() {
+    setEmailLoading(true);
+    try {
+      const data = await requestSchoolEmailCode({ schoolEmail: form.schoolEmail });
+      onProfileSaved(data.user);
+      setMockCode(data.mockCode);
+      setEmailCode("");
+      showToast("개발용 학교 이메일 인증번호가 생성되었습니다.");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
+  async function handleVerifySchoolEmailCode() {
+    setEmailLoading(true);
+    try {
+      const data = await verifySchoolEmailCode({ schoolEmail: form.schoolEmail, code: emailCode });
+      onProfileSaved(data.user);
+      setMockCode("");
+      setEmailCode("");
+      showToast("학교 이메일 인증이 완료되었습니다.");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+      <div>
+        <h2 className="text-2xl font-black text-slate-950">내 정보</h2>
+        <p className="mt-1 text-sm text-slate-500">글 작성과 신청 전에 프로필, 학교 이메일 인증, 에타 확인 정보를 입력해주세요.</p>
+      </div>
+      <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="block"><span className="text-sm font-medium text-slate-700">이름</span><input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="name" onChange={handleChange} required value={form.name} /></label>
+          <label className="block"><span className="text-sm font-medium text-slate-700">학과</span><input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="major" onChange={handleChange} required value={form.major} /></label>
+          <label className="block"><span className="text-sm font-medium text-slate-700">학번</span><input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="studentId" onChange={handleChange} placeholder="예: 20240001" required value={form.studentId} /></label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">성별</span>
+            <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="gender" onChange={handleChange} required value={form.gender}>
+              <option value="">선택</option>
+              <option value="남자">남자</option>
+              <option value="여자">여자</option>
+              <option value="공개 안 함">공개 안 함</option>
+            </select>
+          </label>
+        </div>
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">프로필 소개</span>
+          <textarea className="mt-1 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="profileText" onChange={handleChange} placeholder="댓글/신청 시 글쓴이에게 보여줄 소개" required value={form.profileText} />
+        </label>
+        <section className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-sm font-black text-emerald-700">학교 이메일 인증</p>
+              <p className="mt-1 text-sm text-slate-600">세종대 이메일 주소인 <span className="font-bold">@sju.ac.kr</span>만 인증할 수 있습니다.</p>
+            </div>
+            <span className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${user?.schoolEmailVerified ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"}`}>{user?.schoolEmailVerified ? "인증 완료" : "인증 필요"}</span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">학교 이메일</span>
+              <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="schoolEmail" onChange={handleChange} placeholder="student@sju.ac.kr" required type="email" value={form.schoolEmail} />
+            </label>
+            <button className="mt-6 rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white transition hover:bg-emerald-700 disabled:bg-slate-400" disabled={emailLoading || !form.schoolEmail} onClick={handleRequestSchoolEmailCode} type="button">인증번호 받기</button>
+          </div>
+          {mockCode && <div className="mt-3 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-800">개발용 인증번호: <span className="font-black tracking-[0.2em]">{mockCode}</span></div>}
+          <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
+            <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" inputMode="numeric" maxLength={6} onChange={(event) => setEmailCode(event.target.value)} placeholder="6자리 인증번호" value={emailCode} />
+            <button className="rounded-md border border-emerald-300 bg-white px-4 py-2 font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:bg-slate-100 disabled:text-slate-400" disabled={emailLoading || emailCode.length !== 6} onClick={handleVerifySchoolEmailCode} type="button">인증 확인</button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">과제 MVP에서는 실제 메일 발송 대신 mock 인증번호를 보여줍니다. SMTP를 붙이면 같은 API 구조로 실제 발송으로 교체할 수 있습니다.</p>
+        </section>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="block"><span className="text-sm font-medium text-slate-700">에타 닉네임</span><input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="everytimeNickname" onChange={handleChange} required value={form.everytimeNickname} /></label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">승인 후 공개 연락 수단</span>
+            <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="contactType" onChange={handleChange} required value={form.contactType}>
+              {contactTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+            </select>
+          </label>
+          <label className="block md:col-span-2"><span className="text-sm font-medium text-slate-700">연락처</span><input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="contactValue" onChange={handleChange} placeholder="승인 후에만 상대에게 공개됩니다" required value={form.contactValue} /></label>
+        </div>
+        <label className="flex items-start gap-3 rounded-lg border border-sky-100 bg-sky-50 p-4 text-sm text-sky-900">
+          <input checked={form.everytimeVerified} className="mt-1" name="everytimeVerified" onChange={handleChange} required type="checkbox" />
+          <span>에타 계정/게시글 확인 정보를 입력했으며, 구인 시 에타에도 글을 작성하겠습니다.</span>
+        </label>
+        <button className="rounded-md bg-sky-600 px-5 py-3 font-semibold text-white transition hover:bg-sky-700 disabled:bg-slate-400" disabled={saving} type="submit">
+          {saving ? "저장 중..." : "내 정보 저장"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function AppRoutes({ authReady, user, loading, serverStatus, onAuthSubmit, onLogout, onProfileSaved, showToast }) {
   return (
     <PageShell user={user} onLogout={onLogout}>
       <Routes>
         <Route path="/" element={<HomePage serverStatus={serverStatus} user={user} />} />
         <Route path="/login" element={<AuthPage loading={loading} mode="login" onSubmit={onAuthSubmit} />} />
         <Route path="/signup" element={<AuthPage loading={loading} mode="register" onSubmit={onAuthSubmit} />} />
+        <Route path="/profile" element={<ProfilePage authReady={authReady} onProfileSaved={onProfileSaved} showToast={showToast} user={user} />} />
         <Route path="/boards" element={<BoardPage user={user} />} />
         <Route path="/boards/:boardSlug" element={<BoardPage user={user} />} />
         <Route path="/posts/new" element={<PostFormPage authReady={authReady} showToast={showToast} user={user} />} />
@@ -810,10 +983,7 @@ function AppInner() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "success" });
 
-  const showToast = useMemo(
-    () => (message, type = "success") => setToast({ message, type }),
-    [],
-  );
+  const showToast = useMemo(() => (message, type = "success") => setToast({ message, type }), []);
 
   useEffect(() => {
     async function boot() {
@@ -862,15 +1032,7 @@ function AppInner() {
   return (
     <>
       <Toast toast={toast} onClose={() => setToast({ message: "", type: "success" })} />
-      <AppRoutes
-        authReady={authReady}
-        loading={loading}
-        onAuthSubmit={handleAuthSubmit}
-        onLogout={handleLogout}
-        serverStatus={serverStatus}
-        showToast={showToast}
-        user={user}
-      />
+      <AppRoutes authReady={authReady} loading={loading} onAuthSubmit={handleAuthSubmit} onLogout={handleLogout} onProfileSaved={setUser} serverStatus={serverStatus} showToast={showToast} user={user} />
     </>
   );
 }

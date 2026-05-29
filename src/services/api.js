@@ -82,6 +82,27 @@ export function getCurrentUser() {
   return request("/api/auth/me");
 }
 
+export function updateProfile(payload) {
+  return request("/api/users/me/profile", {
+    body: JSON.stringify(payload),
+    method: "PUT",
+  });
+}
+
+export function requestSchoolEmailCode(payload) {
+  return request("/api/users/me/school-email/request-code", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function verifySchoolEmailCode(payload) {
+  return request("/api/users/me/school-email/verify-code", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
 export function getPosts(filters = {}) {
   return request(`/api/posts${queryString(filters)}`);
 }
@@ -106,6 +127,24 @@ export function updatePost(id, payload) {
 
 export function deletePost(id) {
   return request(`/api/posts/${id}`, { method: "DELETE" });
+}
+
+export function createApplication(postId, payload) {
+  return request(`/api/posts/${postId}/applications`, {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function getApplications(postId) {
+  return request(`/api/posts/${postId}/applications`);
+}
+
+export function updateApplicationStatus(applicationId, status) {
+  return request(`/api/applications/${applicationId}`, {
+    body: JSON.stringify({ status }),
+    method: "PATCH",
+  });
 }
 
 export function requestAiRecommendation(payload) {
