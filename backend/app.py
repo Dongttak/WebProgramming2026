@@ -530,7 +530,13 @@ def update_profile(user):
     if not valid_school_email(school_email):
         return error(f"학교 이메일은 {SCHOOL_EMAIL_DOMAIN}로 끝나야 합니다.")
 
-    school_email_verified = bool(user.get("schoolEmailVerified")) and school_email == user.get("schoolEmail")
+    school_email_verified = (
+        (
+            bool(user.get("schoolEmailVerified"))
+            or (bool(payload.get("schoolEmailVerified")) and not user.get("schoolEmailVerificationCode"))
+        )
+        and school_email == user.get("schoolEmail")
+    )
     clean_payload = {
         "name": (payload.get("name") or user.get("name") or "").strip(),
         "major": (payload.get("major") or "").strip(),

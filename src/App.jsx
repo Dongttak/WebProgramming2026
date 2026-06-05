@@ -935,9 +935,13 @@ function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (!user?.schoolEmailVerified || user.schoolEmail !== form.schoolEmail) {
+      showToast("학교 이메일 인증번호 확인까지 완료해주세요.", "error");
+      return;
+    }
     setSaving(true);
     try {
-      const data = await updateProfile(form);
+      const data = await updateProfile({ ...form, schoolEmailVerified: true });
       onProfileSaved(data.user);
       showToast("내 정보가 저장되었습니다.");
       navigate("/boards");
