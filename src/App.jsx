@@ -899,12 +899,15 @@ function PostDetailPage({ user, showToast }) {
         {isOwner && (
           <div className="flex flex-wrap gap-2">
             <span className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">수정 불가</span>
+            <span className={`rounded-md px-4 py-2 text-sm font-semibold ${postClosed(post) ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}>
+              현재 {statusLabel(postClosed(post) ? "closed" : "open")}
+            </span>
             <button
               className="rounded-md border border-emerald-300 bg-white px-4 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-50 active:scale-[0.98]"
               onClick={() => handlePostStatus(postClosed(post) ? "open" : "closed")}
               type="button"
             >
-              {postClosed(post) ? "구인 재개" : "구인 완료"}
+              {postClosed(post) ? "구인 중으로 변경" : "구인 완료로 변경"}
             </button>
             <button className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700 active:scale-[0.98]" onClick={handleDelete} type="button">삭제</button>
           </div>
