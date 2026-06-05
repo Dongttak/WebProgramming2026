@@ -26,6 +26,7 @@ import {
   requestSchoolEmailCode,
   updateApplicationStatus,
   updateProfile,
+  updatePostStatus,
   verifySchoolEmailCode,
 } from "./services/api";
 
@@ -48,19 +49,18 @@ const contactTypes = [
 const emptyPost = {
   title: "",
   category: "teamplay",
-  location: "",
   meeting_time: "",
   keywords: "",
+  categoryDetails: {},
   contactType: "",
   contactValue: "",
-  everytimePostUrl: "",
   roommateChecklist: {},
   content: "",
 };
 
 const roommateFields = [
-  { key: "gender", label: "성별", options: ["남자", "여자", "상관없음"] },
-  { key: "grade", label: "학번", options: ["22", "23", "24", "25", "26", "상관없음"] },
+  { key: "gender", label: "성별", options: ["남자", "여자"] },
+  { key: "grade", label: "학번", options: ["22", "23", "24", "25", "26"] },
   { key: "majorGroup", label: "단과", options: ["인문", "사회", "경영경제", "공과", "예체능", "상관없음"] },
   { key: "wakeTime", label: "기상시간", options: ["6", "7", "8", "9", "10", "오후", "맞춰서"] },
   { key: "sleepTime", label: "취침시간", options: ["10", "11", "12", "1", "2", "3", "맞춰서"] },
@@ -83,6 +83,23 @@ const roommateFields = [
   { key: "cold", label: "더위", options: ["별로", "중간", "많이"] },
 ];
 
+const categoryDetailFields = {
+  teamplay: [
+    { key: "activityType", label: "활동 종류", type: "select", options: ["수업명", "비교과 활동", "대외활동"] },
+    { key: "activityName", label: "활동명", placeholder: "예: 웹프로그래밍, 해커톤, 공모전" },
+    { key: "activityDetail", label: "활동 내역", placeholder: "예: React 프론트엔드, 발표 자료 제작" },
+  ],
+  meal: [
+    { key: "menu", label: "메뉴", placeholder: "예: 학식, 마라탕, 파스타" },
+    { key: "drinking", label: "음주 여부", type: "select", options: ["안 마셔요", "가볍게", "상관없음"] },
+  ],
+  global: [
+    { key: "desiredLanguage", label: "희망 언어", placeholder: "예: 영어, 일본어, 중국어" },
+    { key: "hobby", label: "취미", placeholder: "예: 카페, 산책, 영화" },
+    { key: "activityArea", label: "활동 가능 지역", placeholder: "예: 교내, 건대입구, 온라인" },
+  ],
+};
+
 function categoryFromSlug(slug) {
   return categories.find((category) => category.slug === slug) ?? null;
 }
@@ -101,11 +118,9 @@ function contactLabel(value) {
 
 function profileCompleted(user) {
   return Boolean(
-    user?.studentId &&
+      user?.studentId &&
       user?.gender &&
       user?.profileText &&
-      user?.everytimeNickname &&
-      user?.everytimeVerified &&
       user?.schoolEmail &&
       user?.schoolEmailVerified &&
       user?.contactType &&
@@ -137,6 +152,24 @@ function roommateSummary(checklist = {}) {
 
   const summary = mbti.length === 4 ? [`MBTI ${mbti}`, ...selected] : selected;
   return summary.length > 0 ? summary.slice(0, 5).join(" · ") : "룸메 체크리스트 미작성";
+}
+
+function categoryDetailSummary(post) {
+  const details = post?.categoryDetails ?? {};
+  if (post?.category === "teamplay") {
+    return [details.activityType, details.activityName, details.activityDetail].filter(Boolean).join(" · ");
+  }
+  if (post?.category === "meal") {
+    return [details.menu, details.drinking].filter(Boolean).join(" · ");
+  }
+  if (post?.category === "global") {
+    return [details.desiredLanguage, details.hobby, details.activityArea].filter(Boolean).join(" · ");
+  }
+  return "";
+}
+
+function statusLabel(status) {
+  return status === "closed" ? "구인 완료" : "구인 중";
 }
 
 function formatDate(value) {
@@ -236,10 +269,6 @@ function HomePage({ serverStatus, user }) {
                 </div>
               </Link>
             ))}
-            <div className="rounded-md border border-dashed border-slate-300 bg-white p-4">
-              <p className="font-bold text-slate-400">데이트</p>
-              <p className="mt-1 text-sm text-slate-400">확장 기능 후보로만 남겨둠</p>
-            </div>
           </div>
         </div>
       </div>
@@ -377,15 +406,24 @@ function BoardPage({ user }) {
                   <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 transition group-hover:bg-sky-100 group-hover:text-sky-700">{categoryIcon(post.category)} · {categoryLabel(post.category)}</span>
                   <h3 className="mt-3 text-xl font-bold text-slate-950">{post.title}</h3>
                 </div>
-                <p className="text-sm text-slate-400">{formatDate(post.created_at)}</p>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${post.status === "closed" ? "bg-slate-200 text-slate-500" : "bg-emerald-50 text-emerald-700"}`}>
+                    {statusLabel(post.status)}
+                  </span>
+                  <p className="text-sm text-slate-400">{formatDate(post.created_at)}</p>
+                </div>
               </div>
               <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">{post.content}</p>
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
                 <span>작성자 {post.author_name}</span>
-                {post.location && <span>장소 {post.location}</span>}
                 {post.meeting_time && <span>시간 {post.meeting_time}</span>}
                 <span className="font-semibold text-sky-700">연락처 승인 후 공개</span>
               </div>
+              {categoryDetailSummary(post) && (
+                <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs font-medium leading-5 text-slate-700">
+                  {categoryDetailSummary(post)}
+                </div>
+              )}
               {splitTags(post.keywords).length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {splitTags(post.keywords).map((tag) => (
@@ -437,7 +475,7 @@ function PostFormPage({ authReady, user, showToast }) {
     return (
       <section className="rounded-lg border border-sky-200 bg-white p-8 text-center shadow-sm">
         <h2 className="text-2xl font-black text-slate-950">내 정보 입력이 필요합니다</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-600">글 작성과 신청 기능은 학교 이메일 인증, 에타 확인 정보, 승인 후 공개할 연락처를 입력한 뒤 사용할 수 있습니다.</p>
+        <p className="mt-3 text-sm leading-6 text-slate-600">글 작성과 신청 기능은 학교 이메일 인증, 기본 프로필, 승인 후 공개할 연락처를 입력한 뒤 사용할 수 있습니다.</p>
         <Link className="mt-5 inline-flex rounded-md bg-sky-600 px-5 py-3 font-semibold text-white transition hover:bg-sky-700" to="/profile">내 정보 입력하기</Link>
       </section>
     );
@@ -453,6 +491,16 @@ function PostFormPage({ authReady, user, showToast }) {
       roommateChecklist: {
         ...(prev.roommateChecklist ?? {}),
         [key]: prev.roommateChecklist?.[key] === value ? "" : value,
+      },
+    }));
+  }
+
+  function handleCategoryDetailChange(key, value) {
+    setForm((prev) => ({
+      ...prev,
+      categoryDetails: {
+        ...(prev.categoryDetails ?? {}),
+        [key]: value,
       },
     }));
   }
@@ -495,7 +543,7 @@ function PostFormPage({ authReady, user, showToast }) {
       </div>
 
       <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">작성 후에는 수정할 수 없습니다. 카테고리, 태그, 에타 작성 확인, 연락처를 꼭 확인한 뒤 등록해주세요.</div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">작성 후에는 수정할 수 없습니다. 카테고리별 정보, 태그, 연락처를 꼭 확인한 뒤 등록해주세요.</div>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">카테고리</span>
@@ -508,6 +556,40 @@ function PostFormPage({ authReady, user, showToast }) {
             <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="keywords" onChange={handleChange} placeholder="예: React, 발표, 화요일 저녁" required value={form.keywords} />
           </label>
         </div>
+
+        {categoryDetailFields[form.category] && (
+          <section className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+            <p className="text-sm font-black text-sky-700">카테고리별 정보</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              {categoryDetailFields[form.category].map((field) => (
+                <label className="block" key={field.key}>
+                  <span className="text-sm font-medium text-slate-700">{field.label}</span>
+                  {field.type === "select" ? (
+                    <select
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950"
+                      onChange={(event) => handleCategoryDetailChange(field.key, event.target.value)}
+                      required
+                      value={form.categoryDetails?.[field.key] ?? ""}
+                    >
+                      <option value="">선택</option>
+                      {field.options.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950"
+                      onChange={(event) => handleCategoryDetailChange(field.key, event.target.value)}
+                      placeholder={field.placeholder}
+                      required
+                      value={form.categoryDetails?.[field.key] ?? ""}
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+          </section>
+        )}
 
         {form.category === "roommate" && (
           <section className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-5">
@@ -547,22 +629,12 @@ function PostFormPage({ authReady, user, showToast }) {
           <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="title" onChange={handleChange} required value={form.title} />
         </label>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">장소</span>
-            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="location" onChange={handleChange} placeholder="예: 중앙도서관, 학생식당" required value={form.location} />
-          </label>
+        <div className="grid gap-4 md:grid-cols-1">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">희망 시간</span>
             <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="meeting_time" onChange={handleChange} placeholder="예: 월/수 18시 이후" required value={form.meeting_time} />
           </label>
         </div>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">에타 글 작성 확인</span>
-          <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="everytimePostUrl" onChange={handleChange} placeholder="예: 에타 게시글 링크, 제목, 작성 시간" required value={form.everytimePostUrl} />
-          <span className="mt-1 block text-xs text-slate-500">실제 에타 연동 대신, 과제 MVP에서는 사용자가 작성한 에타 글 정보를 기록합니다.</span>
-        </label>
 
         <div className="grid gap-4 md:grid-cols-[180px_1fr]">
           <label className="block">
@@ -677,6 +749,16 @@ function PostDetailPage({ user, showToast }) {
     }
   }
 
+  async function handlePostStatus(status) {
+    try {
+      const data = await updatePostStatus(post.id, status);
+      setPost(data.post);
+      showToast(status === "closed" ? "구인 완료로 변경했습니다." : "구인 중으로 변경했습니다.");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
   if (loading) return <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">불러오는 중...</section>;
   if (!post) return <section className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">글을 찾을 수 없습니다.</section>;
 
@@ -694,15 +776,22 @@ function PostDetailPage({ user, showToast }) {
           <p className="mt-2 text-sm text-slate-500">{post.author_name} · {formatDate(post.created_at)}</p>
         </div>
         {isOwner && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <span className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">수정 불가</span>
+            <button
+              className="rounded-md border border-emerald-300 bg-white px-4 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-50 active:scale-[0.98]"
+              onClick={() => handlePostStatus(post.status === "closed" ? "open" : "closed")}
+              type="button"
+            >
+              {post.status === "closed" ? "구인 재개" : "구인 완료"}
+            </button>
             <button className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700 active:scale-[0.98]" onClick={handleDelete} type="button">삭제</button>
           </div>
         )}
       </div>
 
       <dl className="mt-6 grid gap-3 rounded-lg bg-slate-50 p-4 text-sm md:grid-cols-4">
-        <div><dt className="font-semibold text-slate-500">장소</dt><dd className="mt-1 text-slate-950">{post.location || "협의"}</dd></div>
+        <div><dt className="font-semibold text-slate-500">모집 상태</dt><dd className={`mt-1 font-bold ${post.status === "closed" ? "text-slate-500" : "text-emerald-700"}`}>{statusLabel(post.status)}</dd></div>
         <div><dt className="font-semibold text-slate-500">희망 시간</dt><dd className="mt-1 text-slate-950">{post.meeting_time || "협의"}</dd></div>
         <div><dt className="font-semibold text-slate-500">키워드</dt><dd className="mt-1 text-slate-950">{post.keywords || "없음"}</dd></div>
         <div>
@@ -717,9 +806,11 @@ function PostDetailPage({ user, showToast }) {
         ))}
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-        <span className="font-bold text-slate-950">에타 작성 확인:</span> {post.everytimePostUrl || "미입력"}
-      </div>
+      {categoryDetailSummary(post) && (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <span className="font-bold text-slate-950">카테고리 정보:</span> {categoryDetailSummary(post)}
+        </div>
+      )}
 
       {post.category === "roommate" && (
         <section className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50/70 p-5">
@@ -750,7 +841,9 @@ function PostDetailPage({ user, showToast }) {
         <section className="mt-6 rounded-lg border border-sky-200 bg-white p-5">
           <h3 className="text-xl font-black text-slate-950">신청 댓글</h3>
           <p className="mt-1 text-sm text-slate-500">글쓴이만 신청자의 프로필과 연락처를 확인할 수 있고, 승인 후 서로 연락처가 공개됩니다.</p>
-          {!user ? (
+          {post.status === "closed" ? (
+            <p className="mt-4 rounded-md bg-slate-50 p-4 text-sm font-semibold text-slate-500">구인이 완료된 글입니다.</p>
+          ) : !user ? (
             <Link className="mt-4 inline-flex rounded-md bg-sky-600 px-4 py-2 font-semibold text-white" to="/login">로그인 후 신청하기</Link>
           ) : myApplication ? (
             <div className="mt-4 rounded-md bg-slate-50 p-4 text-sm text-slate-700">
@@ -780,7 +873,7 @@ function PostDetailPage({ user, showToast }) {
                   <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
                     <div>
                       <p className="font-black text-slate-950">{application.applicant?.name || "신청자"}</p>
-                      <p className="mt-1 text-sm text-slate-600">{application.applicant?.major} · {application.applicant?.studentId} · 에타 {application.applicant?.everytimeNickname}</p>
+                      <p className="mt-1 text-sm text-slate-600">{application.applicant?.major} · {application.applicant?.studentId} · {application.applicant?.schoolEmail}</p>
                       <p className="mt-2 text-sm text-slate-700">{application.applicant?.profileText}</p>
                       <p className="mt-2 text-sm font-bold text-sky-700">연락처: {contactLabel(application.applicant?.contactType)} · {application.applicant?.contactValue}</p>
                     </div>
@@ -802,14 +895,13 @@ function PostDetailPage({ user, showToast }) {
 }
 
 function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     name: "",
     major: "",
     studentId: "",
     gender: "",
     profileText: "",
-    everytimeNickname: "",
-    everytimeVerified: false,
     schoolEmail: "",
     contactType: "",
     contactValue: "",
@@ -827,8 +919,6 @@ function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
       studentId: user.studentId ?? "",
       gender: user.gender ?? "",
       profileText: user.profileText ?? "",
-      everytimeNickname: user.everytimeNickname ?? "",
-      everytimeVerified: Boolean(user.everytimeVerified),
       schoolEmail: user.schoolEmail ?? "",
       contactType: user.contactType ?? "",
       contactValue: user.contactValue ?? "",
@@ -850,6 +940,7 @@ function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
       const data = await updateProfile(form);
       onProfileSaved(data.user);
       showToast("내 정보가 저장되었습니다.");
+      navigate("/boards");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
@@ -861,7 +952,7 @@ function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
     setEmailLoading(true);
     try {
       const data = await requestSchoolEmailCode({ schoolEmail: form.schoolEmail });
-      onProfileSaved(data.user);
+      onProfileSaved({ ...user, ...form, schoolEmail: data.user.schoolEmail, schoolEmailVerified: false });
       setMockCode(data.mockCode);
       setEmailCode("");
       showToast("개발용 학교 이메일 인증번호가 생성되었습니다.");
@@ -876,7 +967,7 @@ function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
     setEmailLoading(true);
     try {
       const data = await verifySchoolEmailCode({ schoolEmail: form.schoolEmail, code: emailCode });
-      onProfileSaved(data.user);
+      onProfileSaved({ ...user, ...form, schoolEmail: data.user.schoolEmail, schoolEmailVerified: true });
       setMockCode("");
       setEmailCode("");
       showToast("학교 이메일 인증이 완료되었습니다.");
@@ -891,7 +982,7 @@ function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
     <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
       <div>
         <h2 className="text-2xl font-black text-slate-950">내 정보</h2>
-        <p className="mt-1 text-sm text-slate-500">글 작성과 신청 전에 프로필, 학교 이메일 인증, 에타 확인 정보를 입력해주세요.</p>
+        <p className="mt-1 text-sm text-slate-500">글 작성과 신청 전에 프로필과 학교 이메일 인증을 입력해주세요.</p>
       </div>
       <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
         <div className="grid gap-4 md:grid-cols-2">
@@ -935,7 +1026,6 @@ function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
           <p className="mt-2 text-xs text-slate-500">과제 MVP에서는 실제 메일 발송 대신 mock 인증번호를 보여줍니다. SMTP를 붙이면 같은 API 구조로 실제 발송으로 교체할 수 있습니다.</p>
         </section>
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="block"><span className="text-sm font-medium text-slate-700">에타 닉네임</span><input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="everytimeNickname" onChange={handleChange} required value={form.everytimeNickname} /></label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">승인 후 공개 연락 수단</span>
             <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="contactType" onChange={handleChange} required value={form.contactType}>
@@ -944,10 +1034,6 @@ function ProfilePage({ authReady, user, onProfileSaved, showToast }) {
           </label>
           <label className="block md:col-span-2"><span className="text-sm font-medium text-slate-700">연락처</span><input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950" name="contactValue" onChange={handleChange} placeholder="승인 후에만 상대에게 공개됩니다" required value={form.contactValue} /></label>
         </div>
-        <label className="flex items-start gap-3 rounded-lg border border-sky-100 bg-sky-50 p-4 text-sm text-sky-900">
-          <input checked={form.everytimeVerified} className="mt-1" name="everytimeVerified" onChange={handleChange} required type="checkbox" />
-          <span>에타 계정/게시글 확인 정보를 입력했으며, 구인 시 에타에도 글을 작성하겠습니다.</span>
-        </label>
         <button className="rounded-md bg-sky-600 px-5 py-3 font-semibold text-white transition hover:bg-sky-700 disabled:bg-slate-400" disabled={saving} type="submit">
           {saving ? "저장 중..." : "내 정보 저장"}
         </button>

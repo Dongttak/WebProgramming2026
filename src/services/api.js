@@ -129,6 +129,13 @@ export function deletePost(id) {
   return request(`/api/posts/${id}`, { method: "DELETE" });
 }
 
+export function updatePostStatus(id, status) {
+  return request(`/api/posts/${id}/status`, {
+    body: JSON.stringify({ status }),
+    method: "PATCH",
+  });
+}
+
 export function createApplication(postId, payload) {
   return request(`/api/posts/${postId}/applications`, {
     body: JSON.stringify(payload),

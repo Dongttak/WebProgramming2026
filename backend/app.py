@@ -105,8 +105,6 @@ def serialize_user(user):
         "studentId": user.get("studentId", ""),
         "gender": user.get("gender", ""),
         "profileText": user.get("profileText", ""),
-        "everytimeNickname": user.get("everytimeNickname", ""),
-        "everytimeVerified": bool(user.get("everytimeVerified", False)),
         "schoolEmail": user.get("schoolEmail", ""),
         "schoolEmailVerified": bool(user.get("schoolEmailVerified", False)),
         "contactType": user.get("contactType", ""),
@@ -152,14 +150,15 @@ def serialize_post(post, viewer=None):
         "content": post["content"],
         "keywords": post.get("keywords", ""),
         "tags": tags_from_keywords(post.get("keywords", "")),
-        "location": post.get("location", ""),
         "meeting_time": post.get("meeting_time", ""),
+        "categoryDetails": post.get("categoryDetails", {}),
         "contactPolicy": post.get("contactPolicy", "after_approval"),
         "contactType": post.get("contactType", post.get("contact_type", "")) if can_view_contact else "",
         "contactValue": post.get("contactValue", post.get("contact_value", "")) if can_view_contact else "",
         "contactVisible": can_view_contact,
-        "everytimePostUrl": post.get("everytimePostUrl", ""),
         "roommateChecklist": post.get("roommateChecklist", {}),
+        "status": post.get("status", "open"),
+        "isClosed": post.get("status") == "closed",
         "isEditable": False,
         "author_id": str(post["author_id"]),
         "author_name": post.get("author_name", "익명"),
@@ -208,10 +207,9 @@ def validate_post_payload(payload):
     category = CATEGORY_ALIASES.get(payload.get("category"), payload.get("category"))
     contact_type = (payload.get("contactType") or "").strip()
     contact_value = (payload.get("contactValue") or "").strip()
-    location = (payload.get("location") or "").strip()
     meeting_time = (payload.get("meeting_time") or "").strip()
     keywords = (payload.get("keywords") or "").strip()
-    everytime_post_url = (payload.get("everytimePostUrl") or "").strip()
+    raw_category_details = payload.get("categoryDetails") or {}
     raw_roommate_checklist = payload.get("roommateChecklist") or {}
 
     if not title:
@@ -224,16 +222,27 @@ def validate_post_payload(payload):
         return None, "지원하지 않는 연락 수단입니다."
     if not keywords:
         return None, "태그/키워드를 입력해주세요."
-    if not location:
-        return None, "장소를 입력해주세요."
     if not meeting_time:
         return None, "희망 시간을 입력해주세요."
     if not contact_type or not contact_value:
         return None, "승인 후 공개할 연락 수단과 연락처를 입력해주세요."
-    if not everytime_post_url:
-        return None, "에타 글 작성 확인 정보를 입력해주세요."
+    if not isinstance(raw_category_details, dict):
+        return None, "카테고리별 정보 형식이 올바르지 않습니다."
     if not isinstance(raw_roommate_checklist, dict):
         return None, "룸메 체크리스트 형식이 올바르지 않습니다."
+
+    category_detail_fields = {
+        "teamplay": ["activityType", "activityName", "activityDetail"],
+        "meal": ["menu", "drinking"],
+        "global": ["desiredLanguage", "hobby", "activityArea"],
+    }
+    category_details = {
+        key: str(raw_category_details.get(key) or "").strip()
+        for key in category_detail_fields.get(category, [])
+    }
+    missing_detail = [key for key, value in category_details.items() if not value]
+    if missing_detail:
+        return None, "카테고리별 필수 정보를 입력해주세요."
 
     roommate_checklist = {
         key: str(value).strip()
@@ -241,7 +250,7 @@ def validate_post_payload(payload):
         if key in ROOMMATE_CHECKLIST_FIELDS and str(value).strip()
     }
     if category == "roommate":
-        required_roommate_fields = {"gender", "wakeTime", "sleepTime", "cleaning", "smoking"}
+        required_roommate_fields = {"gender", "grade", "wakeTime", "sleepTime", "cleaning", "smoking"}
         if any(not roommate_checklist.get(key) for key in required_roommate_fields):
             return None, "룸메 체크리스트 필수 항목을 선택해주세요."
 
@@ -250,13 +259,13 @@ def validate_post_payload(payload):
         "content": content,
         "category": category,
         "keywords": keywords,
-        "location": location,
         "meeting_time": meeting_time,
+        "categoryDetails": category_details,
         "contactType": contact_type,
         "contactValue": contact_value,
         "contactPolicy": "after_approval",
-        "everytimePostUrl": everytime_post_url,
         "roommateChecklist": roommate_checklist if category == "roommate" else {},
+        "status": "open",
         "isEditable": False,
     }, None
 
@@ -266,14 +275,12 @@ def profile_completed(user):
         "studentId",
         "gender",
         "profileText",
-        "everytimeNickname",
         "schoolEmail",
         "contactType",
         "contactValue",
     ]
     return (
         all((user.get(field) or "").strip() for field in required)
-        and bool(user.get("everytimeVerified"))
         and bool(user.get("schoolEmailVerified"))
     )
 
@@ -332,8 +339,6 @@ def seed_sample_data():
             "studentId": "20240001",
             "gender": "상관없음",
             "profileText": "시연용 샘플 프로필입니다.",
-            "everytimeNickname": "잇다샘플",
-            "everytimeVerified": True,
             "schoolEmail": "sample@sju.ac.kr",
             "schoolEmailVerified": True,
             "contactType": "openchat",
@@ -349,38 +354,45 @@ def seed_sample_data():
             "category": "teamplay",
             "content": "React 화면 구현을 같이 맡아줄 팀원을 찾습니다. 일정은 주 2회 정도 맞춰서 진행하고, 역할 분담을 명확하게 하는 편입니다.",
             "keywords": "React, 발표, GitHub",
-            "location": "중앙도서관 스터디룸",
             "meeting_time": "화/목 18시 이후",
+            "categoryDetails": {
+                "activityType": "수업명",
+                "activityName": "웹프로그래밍",
+                "activityDetail": "React 프론트엔드 구현",
+            },
             "contactType": "openchat",
             "contactValue": "웹프팀플방",
             "contactPolicy": "after_approval",
-            "everytimePostUrl": "에타 웹프로그래밍 팀플 모집글",
+            "status": "open",
         },
         {
             "title": "오늘 학생식당에서 같이 저녁 먹을 사람",
             "category": "meal",
             "content": "시험 끝나고 가볍게 밥 먹을 사람 찾습니다. 처음 봐도 편하게 이야기할 수 있으면 좋아요.",
             "keywords": "저녁, 학생식당, 번개",
-            "location": "학생식당",
             "meeting_time": "오늘 18:30",
+            "categoryDetails": {
+                "menu": "학생식당",
+                "drinking": "안 마셔요",
+            },
             "contactType": "kakao",
             "contactValue": "itda_meal",
             "contactPolicy": "after_approval",
-            "everytimePostUrl": "에타 저녁 번개 모집글",
+            "status": "open",
         },
         {
             "title": "조용하고 깔끔한 룸메이트 찾습니다",
             "category": "roommate",
             "content": "기숙사 신청 전에 생활 패턴이 맞는 분과 이야기해보고 싶습니다. 밤에는 조용한 편이고 청소 규칙을 정하는 것을 선호합니다.",
             "keywords": "기숙사, 조용함, 청결",
-            "location": "학교 근처",
             "meeting_time": "이번 주 상담 가능",
             "contactType": "email",
             "contactValue": "sample@itda.test",
             "contactPolicy": "after_approval",
-            "everytimePostUrl": "에타 룸메 모집글",
+            "status": "open",
             "roommateChecklist": {
-                "gender": "상관없음",
+                "gender": "여자",
+                "grade": "24",
                 "wakeTime": "8",
                 "sleepTime": "12",
                 "showerTime": "저녁",
@@ -402,12 +414,16 @@ def seed_sample_data():
             "category": "global",
             "content": "영어 회화 연습을 하고 싶고, 한국어를 배우는 교환학생에게 학교 생활도 도와줄 수 있습니다.",
             "keywords": "영어, 한국어, 카페",
-            "location": "교내 카페",
             "meeting_time": "수요일 오후",
+            "categoryDetails": {
+                "desiredLanguage": "영어",
+                "hobby": "카페, 산책",
+                "activityArea": "교내",
+            },
             "contactType": "instagram",
             "contactValue": "@itda_global",
             "contactPolicy": "after_approval",
-            "everytimePostUrl": "에타 언어교환 모집글",
+            "status": "open",
         },
     ]
 
@@ -521,21 +537,18 @@ def update_profile(user):
         "studentId": (payload.get("studentId") or "").strip(),
         "gender": (payload.get("gender") or "").strip(),
         "profileText": (payload.get("profileText") or "").strip(),
-        "everytimeNickname": (payload.get("everytimeNickname") or "").strip(),
-        "everytimeVerified": bool(payload.get("everytimeVerified")),
         "schoolEmail": school_email,
         "schoolEmailVerified": school_email_verified,
         "contactType": contact_type,
         "contactValue": (payload.get("contactValue") or "").strip(),
     }
 
-    required = ["name", "major", "studentId", "gender", "profileText", "everytimeNickname", "schoolEmail", "contactValue"]
+    required = ["name", "major", "studentId", "gender", "profileText", "schoolEmail", "contactValue"]
     if (
         any(not clean_payload[field] for field in required)
-        or not clean_payload["everytimeVerified"]
         or not clean_payload["schoolEmailVerified"]
     ):
-        return error("내 정보, 학교 이메일 인증, 에타 확인 정보를 모두 입력해주세요.")
+        return error("내 정보와 학교 이메일 인증을 모두 입력해주세요.")
 
     users.update_one({"_id": user["_id"]}, {"$set": clean_payload})
     updated = users.find_one({"_id": user["_id"]})
@@ -641,7 +654,7 @@ def list_posts():
 @login_required
 def create_post(user):
     if not profile_completed(user):
-        return error("글 작성 전에 내 정보, 학교 이메일 인증, 에타 확인 정보를 입력해주세요.", 403)
+        return error("글 작성 전에 내 정보와 학교 이메일 인증을 입력해주세요.", 403)
 
     payload = request.get_json(silent=True) or {}
     clean_payload, message = validate_post_payload(payload)
@@ -699,11 +712,38 @@ def remove_post(user, post_id):
     return jsonify({"message": "삭제되었습니다."})
 
 
+@app.patch("/api/posts/<post_id>/status")
+@login_required
+def update_post_status(user, post_id):
+    try:
+        object_id = ObjectId(post_id)
+    except Exception:
+        return error("잘못된 글 ID입니다.", 400)
+
+    post = posts.find_one({"_id": object_id})
+    if not post:
+        return error("글을 찾을 수 없습니다.", 404)
+    if post["author_id"] != user["_id"]:
+        return error("작성자만 상태를 변경할 수 있습니다.", 403)
+
+    payload = request.get_json(silent=True) or {}
+    status = payload.get("status")
+    if status not in {"open", "closed"}:
+        return error("지원하지 않는 모집 상태입니다.")
+
+    posts.update_one(
+        {"_id": object_id},
+        {"$set": {"status": status, "closed_at": now() if status == "closed" else None, "updated_at": now()}},
+    )
+    updated = posts.find_one({"_id": object_id})
+    return jsonify({"post": serialize_post(updated, user)})
+
+
 @app.post("/api/posts/<post_id>/applications")
 @login_required
 def create_application(user, post_id):
     if not profile_completed(user):
-        return error("신청 전에 내 정보, 학교 이메일 인증, 에타 확인 정보를 입력해주세요.", 403)
+        return error("신청 전에 내 정보와 학교 이메일 인증을 입력해주세요.", 403)
 
     try:
         object_id = ObjectId(post_id)
@@ -715,6 +755,8 @@ def create_application(user, post_id):
         return error("글을 찾을 수 없습니다.", 404)
     if post["author_id"] == user["_id"]:
         return error("본인 글에는 신청할 수 없습니다.", 400)
+    if post.get("status") == "closed":
+        return error("구인이 완료된 글에는 신청할 수 없습니다.", 400)
 
     payload = request.get_json(silent=True) or {}
     message = (payload.get("message") or "").strip()
@@ -806,7 +848,7 @@ def ai_recommend():
         },
         "meal": {
             "title": f"{keywords} 같이 할 밥 친구 구해요",
-            "content": f"{keywords} 느낌으로 가볍게 밥 먹을 사람을 찾습니다.\n처음 봐도 부담 없이 이야기하면 좋겠고, 메뉴와 장소는 같이 정해도 좋아요.",
+            "content": f"{keywords} 느낌으로 가볍게 밥 먹을 사람을 찾습니다.\n처음 봐도 부담 없이 이야기하면 좋겠고, 메뉴와 시간은 같이 정해도 좋아요.",
         },
         "roommate": {
             "title": f"{keywords} 맞는 룸메이트 찾습니다",

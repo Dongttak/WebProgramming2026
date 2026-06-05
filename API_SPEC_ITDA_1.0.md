@@ -11,13 +11,14 @@ Frontend(Vite React SPA) ↔ Backend(Flask) 통신 규격 v1.1
 | `POST` | `/api/auth/login` | 로그인 | 불필요 |
 | `POST` | `/api/auth/logout` | 로그아웃 | 선택 |
 | `GET` | `/api/auth/me` | 현재 로그인 사용자 조회 | 필요 |
-| `PUT` | `/api/users/me/profile` | 내 정보/에타 확인/연락처 저장 | 필요 |
+| `PUT` | `/api/users/me/profile` | 내 정보/학교 이메일/연락처 저장 | 필요 |
 | `POST` | `/api/users/me/school-email/request-code` | 학교 이메일 mock 인증번호 요청 | 필요 |
 | `POST` | `/api/users/me/school-email/verify-code` | 학교 이메일 인증번호 확인 | 필요 |
 | `GET` | `/api/posts` | 게시글 목록/검색/카테고리 필터 | 불필요 |
 | `POST` | `/api/posts` | 게시글 작성 | 필요 |
 | `GET` | `/api/posts/:id` | 게시글 상세 | 불필요 |
 | `PUT` | `/api/posts/:id` | 수정 불가 안내 | 필요 |
+| `PATCH` | `/api/posts/:id/status` | 구인 완료/구인 재개 | 작성자 |
 | `DELETE` | `/api/posts/:id` | 게시글 삭제 | 작성자 |
 | `POST` | `/api/posts/:id/applications` | 신청 댓글 작성 | 필요 |
 | `GET` | `/api/posts/:id/applications` | 신청 목록/내 신청 조회 | 필요 |
@@ -89,15 +90,13 @@ Flask 세션 쿠키도 함께 지원하지만, 배포 환경에서 안정성을 
   "studentId": "20240001",
   "gender": "공개 안 함",
   "profileText": "팀플은 일정 공유를 잘하는 편입니다.",
-  "everytimeNickname": "홍길동",
-  "everytimeVerified": true,
   "schoolEmail": "hong@sju.ac.kr",
   "contactType": "openchat",
   "contactValue": "itda-openchat"
 }
 ```
 
-글 작성과 신청은 학교 이메일 인증, 내 정보, 에타 확인, 승인 후 공개 연락처가 모두 저장된 뒤 가능하다.
+글 작성과 신청은 학교 이메일 인증, 내 정보, 승인 후 공개 연락처가 모두 저장된 뒤 가능하다.
 
 ## 게시글 작성
 
@@ -108,17 +107,27 @@ Flask 세션 쿠키도 함께 지원하지만, 배포 환경에서 안정성을 
   "title": "웹프로그래밍 팀플 팀원 구해요",
   "category": "teamplay",
   "keywords": "React, 발표",
-  "location": "중앙도서관",
   "meeting_time": "화요일 18시",
+  "categoryDetails": {
+    "activityType": "수업명",
+    "activityName": "웹프로그래밍",
+    "activityDetail": "React 프론트엔드"
+  },
   "contactType": "openchat",
   "contactValue": "itda-team-chat",
-  "everytimePostUrl": "에타 팀플 모집글",
   "content": "React 화면 구현을 같이 할 팀원을 찾습니다.",
   "roommateChecklist": {}
 }
 ```
 
-룸메 글은 `gender`, `wakeTime`, `sleepTime`, `cleaning`, `smoking` 체크리스트가 필수다. MBTI는 `mbtiEI`, `mbtiSN`, `mbtiTF`, `mbtiJP` 4개 축으로 저장한다.
+카테고리별 필수 정보:
+
+- 팀플: `activityType`, `activityName`, `activityDetail`
+- 밥: `menu`, `drinking`
+- 외국인 교류: `desiredLanguage`, `hobby`, `activityArea`
+- 룸메: `gender`, `grade`, `wakeTime`, `sleepTime`, `cleaning`, `smoking`
+
+룸메 MBTI는 `mbtiEI`, `mbtiSN`, `mbtiTF`, `mbtiJP` 4개 축으로 저장한다.
 
 ## 연락처 공개 정책
 
@@ -156,6 +165,18 @@ Flask 세션 쿠키도 함께 지원하지만, 배포 환경에서 안정성을 
 ```
 
 승인 후 신청자는 게시글 상세에서 글쓴이 연락처를 볼 수 있다. 글쓴이는 신청자 관리 영역에서 신청자의 프로필과 연락처를 볼 수 있다.
+
+## 구인 상태
+
+작성자는 아래 API로 글 상태를 바꿀 수 있다. `closed` 상태의 글에는 새 신청을 남길 수 없다.
+
+`PATCH /api/posts/:id/status`
+
+```json
+{
+  "status": "closed"
+}
+```
 
 ## 배포 환경변수
 
