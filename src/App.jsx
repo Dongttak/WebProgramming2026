@@ -190,12 +190,22 @@ function truthyStatusValue(value) {
   return ["true", "1", "yes", "y", "closed", "done", "completed", "complete", "구인완료", "모집완료", "완료", "마감"].includes(normalizedStatusText(value));
 }
 
+function falseyStatusValue(value) {
+  if (typeof value === "boolean") return !value;
+  if (typeof value === "number") return value === 0;
+  return ["false", "0", "no", "n", "closed", "done", "completed", "complete", "구인완료", "모집완료", "완료", "마감"].includes(normalizedStatusText(value));
+}
+
 function postStatus(post) {
   const statusValues = [
     post?.status,
+    post?.recruitment_status,
     post?.recruitmentStatus,
+    post?.recruit_status,
     post?.recruitStatus,
+    post?.matching_status,
     post?.matchingStatus,
+    post?.post_status,
     post?.postStatus,
     post?.state,
   ];
@@ -204,6 +214,7 @@ function postStatus(post) {
   }
   if (
     ["isClosed", "is_closed", "isCompleted", "completed", "closed", "done", "isDone"].some((field) => truthyStatusValue(post?.[field])) ||
+    ["isRecruiting", "is_recruiting", "recruiting", "isOpen", "is_open", "open", "isActive", "is_active", "active", "isAvailable", "is_available", "available"].some((field) => Object.prototype.hasOwnProperty.call(post ?? {}, field) && falseyStatusValue(post?.[field])) ||
     ["closed_at", "closedAt", "completed_at", "completedAt", "done_at", "doneAt"].some((field) => Boolean(post?.[field]))
   ) {
     return "closed";
@@ -432,7 +443,20 @@ function BoardPage({ user }) {
           q,
           status: statusFilter === "all" ? "" : statusFilter,
         });
-        if (alive) setPosts(data.posts.map(normalizePost));
+        const listPosts = data.posts.map(normalizePost);
+        const postsWithDetailStatus = await Promise.all(
+          listPosts.map(async (post) => {
+            try {
+              const detail = await getPost(post.id);
+              return normalizePost({ ...post, ...detail.post });
+            } catch {
+              return post;
+            }
+          }),
+        );
+        const visiblePosts =
+          statusFilter === "all" ? postsWithDetailStatus : postsWithDetailStatus.filter((post) => post.status === statusFilter);
+        if (alive) setPosts(visiblePosts);
       } finally {
         if (alive) setLoading(false);
       }

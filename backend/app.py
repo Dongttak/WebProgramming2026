@@ -108,12 +108,24 @@ def truthy_status_value(value):
     return normalized_status_text(value) in {"true", "1", "yes", "y", "closed", "done", "completed", "complete", "구인완료", "모집완료", "완료", "마감"}
 
 
+def falsey_status_value(value):
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, (int, float)):
+        return value == 0
+    return normalized_status_text(value) in {"false", "0", "no", "n", "closed", "done", "completed", "complete", "구인완료", "모집완료", "완료", "마감"}
+
+
 def post_status(post):
     status_values = (
         post.get("status"),
+        post.get("recruitment_status"),
         post.get("recruitmentStatus"),
+        post.get("recruit_status"),
         post.get("recruitStatus"),
+        post.get("matching_status"),
         post.get("matchingStatus"),
+        post.get("post_status"),
         post.get("postStatus"),
         post.get("state"),
     )
@@ -126,6 +138,22 @@ def post_status(post):
     legacy_closed = any(
         truthy_status_value(post.get(field))
         for field in ("isClosed", "is_closed", "isCompleted", "completed", "closed", "done", "isDone")
+    ) or any(
+        field in post and falsey_status_value(post.get(field))
+        for field in (
+            "isRecruiting",
+            "is_recruiting",
+            "recruiting",
+            "isOpen",
+            "is_open",
+            "open",
+            "isActive",
+            "is_active",
+            "active",
+            "isAvailable",
+            "is_available",
+            "available",
+        )
     ) or any(
         bool(post.get(field))
         for field in ("closed_at", "closedAt", "completed_at", "completedAt", "done_at", "doneAt")
