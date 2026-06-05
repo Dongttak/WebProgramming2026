@@ -96,16 +96,41 @@ def tags_from_keywords(keywords):
     return [tag.strip() for tag in (keywords or "").replace("#", ",").split(",") if tag.strip()]
 
 
+def normalized_status_text(value):
+    return str(value or "").strip().replace(" ", "").lower()
+
+
+def truthy_status_value(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value == 1
+    return normalized_status_text(value) in {"true", "1", "yes", "y", "closed", "done", "completed", "complete", "구인완료", "모집완료", "완료", "마감"}
+
+
 def post_status(post):
-    legacy_closed = (
-        post.get("isClosed") is True
-        or post.get("isCompleted") is True
-        or post.get("completed") is True
-        or bool(post.get("closed_at"))
-        or bool(post.get("closedAt"))
-        or bool(post.get("completed_at"))
+    status_values = (
+        post.get("status"),
+        post.get("recruitmentStatus"),
+        post.get("recruitStatus"),
+        post.get("matchingStatus"),
+        post.get("postStatus"),
+        post.get("state"),
     )
-    return "closed" if post.get("status") == "closed" or legacy_closed else "open"
+    if any(
+        normalized_status_text(value) in {"closed", "done", "completed", "complete", "구인완료", "모집완료", "완료", "마감"}
+        for value in status_values
+    ):
+        return "closed"
+
+    legacy_closed = any(
+        truthy_status_value(post.get(field))
+        for field in ("isClosed", "is_closed", "isCompleted", "completed", "closed", "done", "isDone")
+    ) or any(
+        bool(post.get(field))
+        for field in ("closed_at", "closedAt", "completed_at", "completedAt", "done_at", "doneAt")
+    )
+    return "closed" if legacy_closed else "open"
 
 
 def serialize_user(user):

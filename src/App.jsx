@@ -180,8 +180,44 @@ function statusLabel(status) {
   return status === "closed" ? "구인 완료" : "구인 중";
 }
 
+function normalizedStatusText(value) {
+  return String(value ?? "").trim().replace(/\s+/g, "").toLowerCase();
+}
+
+function truthyStatusValue(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  return ["true", "1", "yes", "y", "closed", "done", "completed", "complete", "구인완료", "모집완료", "완료", "마감"].includes(normalizedStatusText(value));
+}
+
+function postStatus(post) {
+  const statusValues = [
+    post?.status,
+    post?.recruitmentStatus,
+    post?.recruitStatus,
+    post?.matchingStatus,
+    post?.postStatus,
+    post?.state,
+  ];
+  if (statusValues.some((value) => ["closed", "done", "completed", "complete", "구인완료", "모집완료", "완료", "마감"].includes(normalizedStatusText(value)))) {
+    return "closed";
+  }
+  if (
+    ["isClosed", "is_closed", "isCompleted", "completed", "closed", "done", "isDone"].some((field) => truthyStatusValue(post?.[field])) ||
+    ["closed_at", "closedAt", "completed_at", "completedAt", "done_at", "doneAt"].some((field) => Boolean(post?.[field]))
+  ) {
+    return "closed";
+  }
+  return "open";
+}
+
 function postClosed(post) {
-  return post?.status === "closed" || post?.isClosed === true;
+  return postStatus(post) === "closed";
+}
+
+function normalizePost(post) {
+  const status = postStatus(post);
+  return { ...post, status, isClosed: status === "closed" };
 }
 
 function formatDate(value) {
@@ -396,7 +432,7 @@ function BoardPage({ user }) {
           q,
           status: statusFilter === "all" ? "" : statusFilter,
         });
-        if (alive) setPosts(data.posts);
+        if (alive) setPosts(data.posts.map(normalizePost));
       } finally {
         if (alive) setLoading(false);
       }
@@ -737,7 +773,7 @@ function PostDetailPage({ user, showToast }) {
       setLoading(true);
       try {
         const data = await getPost(id);
-        if (alive) setPost(data.post);
+        if (alive) setPost(normalizePost(data.post));
       } catch (error) {
         showToast(error.message, "error");
       } finally {
@@ -804,7 +840,7 @@ function PostDetailPage({ user, showToast }) {
       setApplicationsList((prev) => prev.map((item) => (item.id === applicationId ? data.application : item)));
       showToast(status === "approved" ? "신청을 승인했습니다." : "신청을 거절했습니다.");
       const refreshed = await getPost(post.id);
-      setPost(refreshed.post);
+      setPost(normalizePost(refreshed.post));
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -813,7 +849,7 @@ function PostDetailPage({ user, showToast }) {
   async function handlePostStatus(status) {
     try {
       const data = await updatePostStatus(post.id, status);
-      setPost(data.post);
+      setPost(normalizePost(data.post));
       showToast(status === "closed" ? "구인 완료로 변경했습니다." : "구인 중으로 변경했습니다.");
     } catch (error) {
       showToast(error.message, "error");
