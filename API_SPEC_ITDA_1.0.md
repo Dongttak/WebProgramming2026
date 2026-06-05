@@ -124,7 +124,7 @@ Flask 세션 쿠키도 함께 지원하지만, 배포 환경에서 안정성을 
 
 - 팀플: `activityType`, `activityName`, `activityDetail`
 - 밥: `menu`, `drinking`
-- 외국인 교류: `desiredLanguage`, `hobby`, `activityArea`
+- 외국인 교류: `desiredLanguage`, `offeredLanguage`, `hobby`, `activityArea`
 - 룸메: `gender`, `grade`, `wakeTime`, `sleepTime`, `cleaning`, `smoking`
 
 룸메 MBTI는 `mbtiEI`, `mbtiSN`, `mbtiTF`, `mbtiJP` 4개 축으로 저장한다.

@@ -95,6 +95,7 @@ const categoryDetailFields = {
   ],
   global: [
     { key: "desiredLanguage", label: "희망 언어", placeholder: "예: 영어, 일본어, 중국어" },
+    { key: "offeredLanguage", label: "제공 언어", placeholder: "예: 한국어, 영어" },
     { key: "hobby", label: "취미", placeholder: "예: 카페, 산책, 영화" },
     { key: "activityArea", label: "활동 가능 지역", placeholder: "예: 교내, 건대입구, 온라인" },
   ],
@@ -163,7 +164,14 @@ function categoryDetailSummary(post) {
     return [details.menu, details.drinking].filter(Boolean).join(" · ");
   }
   if (post?.category === "global") {
-    return [details.desiredLanguage, details.hobby, details.activityArea].filter(Boolean).join(" · ");
+    return [
+      details.desiredLanguage && `희망 ${details.desiredLanguage}`,
+      details.offeredLanguage && `제공 ${details.offeredLanguage}`,
+      details.hobby,
+      details.activityArea,
+    ]
+      .filter(Boolean)
+      .join(" · ");
   }
   return "";
 }
@@ -349,15 +357,29 @@ function BoardPage({ user }) {
   const activeCategory = categoryFromSlug(boardSlug);
   const [posts, setPosts] = useState([]);
   const [q, setQ] = useState(searchParams.get("q") ?? "");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") ?? "open");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setQ(searchParams.get("q") ?? "");
+    setStatusFilter(searchParams.get("status") ?? "open");
   }, [searchParams]);
 
+  function updateBoardParams(nextQ = q, nextStatus = statusFilter) {
+    setQ(nextQ);
+    setStatusFilter(nextStatus);
+    const nextParams = {};
+    if (nextQ) nextParams.q = nextQ;
+    if (nextStatus !== "open") nextParams.status = nextStatus;
+    setSearchParams(nextParams);
+  }
+
   function updateSearch(value) {
-    setQ(value);
-    setSearchParams(value ? { q: value } : {});
+    updateBoardParams(value, statusFilter);
+  }
+
+  function updateStatus(value) {
+    updateBoardParams(q, value);
   }
 
   useEffect(() => {
@@ -365,7 +387,11 @@ function BoardPage({ user }) {
     async function load() {
       setLoading(true);
       try {
-        const data = await getPosts({ category: activeCategory?.value ?? "", q });
+        const data = await getPosts({
+          category: activeCategory?.value ?? "",
+          q,
+          status: statusFilter === "all" ? "" : statusFilter,
+        });
         if (alive) setPosts(data.posts);
       } finally {
         if (alive) setLoading(false);
@@ -375,7 +401,7 @@ function BoardPage({ user }) {
     return () => {
       alive = false;
     };
-  }, [activeCategory?.value, q]);
+  }, [activeCategory?.value, q, statusFilter]);
 
   return (
     <section className="space-y-5">
@@ -389,18 +415,49 @@ function BoardPage({ user }) {
 
       <BoardTabs activeSlug={boardSlug} />
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr_auto] md:items-center">
         <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-slate-950 outline-none focus:border-sky-500" onChange={(event) => updateSearch(event.target.value)} placeholder="제목, 내용, 키워드 검색" value={q} />
+        <div className="grid grid-cols-3 rounded-md border border-slate-200 bg-slate-50 p-1 text-sm font-bold">
+          {[
+            ["open", "구인 중"],
+            ["closed", "구인 완료"],
+            ["all", "전체"],
+          ].map(([value, label]) => (
+            <button
+              className={`rounded px-3 py-2 transition active:scale-[0.98] ${
+                statusFilter === value ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"
+              }`}
+              key={value}
+              onClick={() => updateStatus(value)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
         <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">불러오는 중...</div>
       ) : posts.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">아직 조건에 맞는 글이 없습니다.</div>
+        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500">
+          {statusFilter === "closed" ? "아직 구인 완료된 글이 없습니다." : "아직 조건에 맞는 글이 없습니다."}
+        </div>
       ) : (
         <div className="grid gap-4">
           {posts.map((post) => (
-            <article className="group rounded-lg border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-sky-300 hover:shadow-md active:scale-[0.99]" key={post.id} onClick={() => navigate(`/posts/${post.id}`)} onKeyDown={(event) => { if (event.key === "Enter") navigate(`/posts/${post.id}`); }} role="button" tabIndex={0}>
+            <article
+              className={`group rounded-lg border p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md active:scale-[0.99] ${
+                post.status === "closed"
+                  ? "border-slate-200 bg-slate-50 opacity-85 hover:border-slate-300"
+                  : "border-slate-200 bg-white hover:border-sky-300"
+              }`}
+              key={post.id}
+              onClick={() => navigate(`/posts/${post.id}`)}
+              onKeyDown={(event) => { if (event.key === "Enter") navigate(`/posts/${post.id}`); }}
+              role="button"
+              tabIndex={0}
+            >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 transition group-hover:bg-sky-100 group-hover:text-sky-700">{categoryIcon(post.category)} · {categoryLabel(post.category)}</span>

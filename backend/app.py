@@ -234,7 +234,7 @@ def validate_post_payload(payload):
     category_detail_fields = {
         "teamplay": ["activityType", "activityName", "activityDetail"],
         "meal": ["menu", "drinking"],
-        "global": ["desiredLanguage", "hobby", "activityArea"],
+        "global": ["desiredLanguage", "offeredLanguage", "hobby", "activityArea"],
     }
     category_details = {
         key: str(raw_category_details.get(key) or "").strip()
@@ -417,6 +417,7 @@ def seed_sample_data():
             "meeting_time": "수요일 오후",
             "categoryDetails": {
                 "desiredLanguage": "영어",
+                "offeredLanguage": "한국어",
                 "hobby": "카페, 산책",
                 "activityArea": "교내",
             },
@@ -635,6 +636,7 @@ def verify_school_email_code(user):
 @app.get("/api/posts")
 def list_posts():
     category = request.args.get("category")
+    status = request.args.get("status")
     keyword = (request.args.get("q") or "").strip()
     query = {}
 
@@ -643,6 +645,11 @@ def list_posts():
         if category not in CATEGORIES:
             return error("지원하지 않는 카테고리입니다.")
         query["category"] = category
+
+    if status:
+        if status not in {"open", "closed"}:
+            return error("지원하지 않는 모집 상태입니다.")
+        query["status"] = status
 
     if keyword:
         query["$or"] = [
