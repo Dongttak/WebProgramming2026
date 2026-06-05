@@ -180,6 +180,10 @@ function statusLabel(status) {
   return status === "closed" ? "구인 완료" : "구인 중";
 }
 
+function postClosed(post) {
+  return post?.status === "closed" || post?.isClosed === true;
+}
+
 function formatDate(value) {
   if (!value) return "";
   return new Intl.DateTimeFormat("ko-KR", {
@@ -448,7 +452,7 @@ function BoardPage({ user }) {
           {posts.map((post) => (
             <article
               className={`group rounded-lg border p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md active:scale-[0.99] ${
-                post.status === "closed"
+                postClosed(post)
                   ? "border-slate-200 bg-slate-50 opacity-85 hover:border-slate-300"
                   : "border-slate-200 bg-white hover:border-sky-300"
               }`}
@@ -464,8 +468,8 @@ function BoardPage({ user }) {
                   <h3 className="mt-3 text-xl font-bold text-slate-950">{post.title}</h3>
                 </div>
                 <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${post.status === "closed" ? "bg-slate-200 text-slate-500" : "bg-emerald-50 text-emerald-700"}`}>
-                    {statusLabel(post.status)}
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${postClosed(post) ? "bg-slate-200 text-slate-500" : "bg-emerald-50 text-emerald-700"}`}>
+                    {statusLabel(postClosed(post) ? "closed" : "open")}
                   </span>
                   <p className="text-sm text-slate-400">{formatDate(post.created_at)}</p>
                 </div>
@@ -837,10 +841,10 @@ function PostDetailPage({ user, showToast }) {
             <span className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">수정 불가</span>
             <button
               className="rounded-md border border-emerald-300 bg-white px-4 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-50 active:scale-[0.98]"
-              onClick={() => handlePostStatus(post.status === "closed" ? "open" : "closed")}
+              onClick={() => handlePostStatus(postClosed(post) ? "open" : "closed")}
               type="button"
             >
-              {post.status === "closed" ? "구인 재개" : "구인 완료"}
+              {postClosed(post) ? "구인 재개" : "구인 완료"}
             </button>
             <button className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700 active:scale-[0.98]" onClick={handleDelete} type="button">삭제</button>
           </div>
@@ -848,7 +852,7 @@ function PostDetailPage({ user, showToast }) {
       </div>
 
       <dl className="mt-6 grid gap-3 rounded-lg bg-slate-50 p-4 text-sm md:grid-cols-4">
-        <div><dt className="font-semibold text-slate-500">모집 상태</dt><dd className={`mt-1 font-bold ${post.status === "closed" ? "text-slate-500" : "text-emerald-700"}`}>{statusLabel(post.status)}</dd></div>
+        <div><dt className="font-semibold text-slate-500">모집 상태</dt><dd className={`mt-1 font-bold ${postClosed(post) ? "text-slate-500" : "text-emerald-700"}`}>{statusLabel(postClosed(post) ? "closed" : "open")}</dd></div>
         <div><dt className="font-semibold text-slate-500">희망 시간</dt><dd className="mt-1 text-slate-950">{post.meeting_time || "협의"}</dd></div>
         <div><dt className="font-semibold text-slate-500">키워드</dt><dd className="mt-1 text-slate-950">{post.keywords || "없음"}</dd></div>
         <div>
@@ -898,7 +902,7 @@ function PostDetailPage({ user, showToast }) {
         <section className="mt-6 rounded-lg border border-sky-200 bg-white p-5">
           <h3 className="text-xl font-black text-slate-950">신청 댓글</h3>
           <p className="mt-1 text-sm text-slate-500">글쓴이만 신청자의 프로필과 연락처를 확인할 수 있고, 승인 후 서로 연락처가 공개됩니다.</p>
-          {post.status === "closed" ? (
+          {postClosed(post) ? (
             <p className="mt-4 rounded-md bg-slate-50 p-4 text-sm font-semibold text-slate-500">구인이 완료된 글입니다.</p>
           ) : !user ? (
             <Link className="mt-4 inline-flex rounded-md bg-sky-600 px-4 py-2 font-semibold text-white" to="/login">로그인 후 신청하기</Link>

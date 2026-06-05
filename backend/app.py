@@ -96,6 +96,18 @@ def tags_from_keywords(keywords):
     return [tag.strip() for tag in (keywords or "").replace("#", ",").split(",") if tag.strip()]
 
 
+def post_status(post):
+    legacy_closed = (
+        post.get("isClosed") is True
+        or post.get("isCompleted") is True
+        or post.get("completed") is True
+        or bool(post.get("closed_at"))
+        or bool(post.get("closedAt"))
+        or bool(post.get("completed_at"))
+    )
+    return "closed" if post.get("status") == "closed" or legacy_closed else "open"
+
+
 def serialize_user(user):
     return {
         "id": str(user["_id"]),
@@ -143,6 +155,7 @@ def can_view_post_contact(post, viewer):
 
 def serialize_post(post, viewer=None):
     can_view_contact = can_view_post_contact(post, viewer)
+    normalized_status = post_status(post)
     return {
         "id": str(post["_id"]),
         "title": post["title"],
@@ -157,8 +170,8 @@ def serialize_post(post, viewer=None):
         "contactValue": post.get("contactValue", post.get("contact_value", "")) if can_view_contact else "",
         "contactVisible": can_view_contact,
         "roommateChecklist": post.get("roommateChecklist", {}),
-        "status": post.get("status", "open"),
-        "isClosed": post.get("status") == "closed",
+        "status": normalized_status,
+        "isClosed": normalized_status == "closed",
         "isEditable": False,
         "author_id": str(post["author_id"]),
         "author_name": post.get("author_name", "익명"),
@@ -649,7 +662,6 @@ def list_posts():
     if status:
         if status not in {"open", "closed"}:
             return error("지원하지 않는 모집 상태입니다.")
-        query["status"] = status
 
     if keyword:
         query["$or"] = [
@@ -659,7 +671,9 @@ def list_posts():
         ]
 
     viewer = current_user()
-    found_posts = posts.find(query).sort("created_at", -1)
+    found_posts = list(posts.find(query).sort("created_at", -1))
+    if status:
+        found_posts = [post for post in found_posts if post_status(post) == status]
     return jsonify({"posts": [serialize_post(post, viewer) for post in found_posts]})
 
 
@@ -744,10 +758,14 @@ def update_post_status(user, post_id):
     if status not in {"open", "closed"}:
         return error("지원하지 않는 모집 상태입니다.")
 
-    posts.update_one(
-        {"_id": object_id},
-        {"$set": {"status": status, "closed_at": now() if status == "closed" else None, "updated_at": now()}},
-    )
+    update_fields = {"status": status, "isClosed": status == "closed", "updated_at": now()}
+    update_doc = {"$set": update_fields}
+    if status == "closed":
+        update_fields["closed_at"] = now()
+    else:
+        update_doc["$unset"] = {"closed_at": ""}
+
+    posts.update_one({"_id": object_id}, update_doc)
     updated = posts.find_one({"_id": object_id})
     return jsonify({"post": serialize_post(updated, user)})
 
@@ -768,7 +786,7 @@ def create_application(user, post_id):
         return error("글을 찾을 수 없습니다.", 404)
     if post["author_id"] == user["_id"]:
         return error("본인 글에는 신청할 수 없습니다.", 400)
-    if post.get("status") == "closed":
+    if post_status(post) == "closed":
         return error("구인이 완료된 글에는 신청할 수 없습니다.", 400)
 
     payload = request.get_json(silent=True) or {}
